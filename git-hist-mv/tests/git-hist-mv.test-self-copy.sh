@@ -27,8 +27,8 @@ sleep 1
 
 sleep 1
 
-# moving self-tree with rebase - zip parent timelines
-echo -e "\e[34m""moving self-tree with rebase - zip parent timelines""\e[0m"
+# copying subdirectory in history - zip parent timelines with rebase
+echo -e "\e[34m""copying subdirectory in history - zip parent timelines with rebase""\e[0m"
   git branch b1s b1
   ../../git-hist-mv.sh "b1s/sd" "b1s/sd-cpy" --copy
 
