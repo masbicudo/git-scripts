@@ -14,7 +14,7 @@
 # - show one file per line:
 #      ./git-hist-file-size.sh -sz 10kb -sl
 
-BIG=0
+_SIZE=0
 
 dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
 cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
@@ -24,23 +24,33 @@ while [[ $# -gt 0 ]]
 do
   key="$1"
   case $key in
-    -sl|--single-line) SINGLE_LINE=TRUE; shift;;
-    -fn|--file-name)   FNAME=$2;  shift; shift;;
-    -d|--dir)          _DIR=$2;   shift; shift;;
-    -sz|--size)        BIG=$2;    shift; shift;;
-    *)                                   shift;;
+    -sl|--single-line) _SL=TRUE;;
+    -fn|--file-name)   _FNAME=$2;  shift;;
+    -d|--dir)          _DIR=$2;   shift;;
+    -sz|--size)        _SIZE=$2;    shift;;
+    *)                                 ;;
   esac
+  shift
 done
 
-if [[ "$BIG" =~ ^[0-9]+[KMGTEkmgte][Bb]$ ]]; then
-  LETTER=$(echo $BIG | sed -r 's ^[0-9]+([KMGTE])B$ \1 gI')
-  BIG=$(echo $BIG | sed -r 's ^([0-9]+)[KMGTE]B$ \1 gI')
-  if [ ${LETTER^^} = "K" ]; then let "BIG=$BIG*1024"; fi
-  if [ ${LETTER^^} = "M" ]; then let "BIG=$BIG*1024000"; fi
-  if [ ${LETTER^^} = "G" ]; then let "BIG=$BIG*1024000000"; fi
-  if [ ${LETTER^^} = "T" ]; then let "BIG=$BIG*1024000000000"; fi
-  if [ ${LETTER^^} = "E" ]; then let "BIG=$BIG*1024000000000000"; fi
+if [[ "$_SIZE" =~ ^[0-9]+[KMGTEkmgte][Bb]$ ]]; then
+  LETTER=$(echo $_SIZE | sed -r 's ^[0-9]+([KMGTE])B$ \1 gI')
+  _SIZE=$(echo $_SIZE | sed -r 's ^([0-9]+)[KMGTE]B$ \1 gI')
+  if [ ${LETTER^^} = "K" ]; then let "_SIZE=$_SIZE*1024"; fi
+  if [ ${LETTER^^} = "M" ]; then let "_SIZE=$_SIZE*1024000"; fi
+  if [ ${LETTER^^} = "G" ]; then let "_SIZE=$_SIZE*1024000000"; fi
+  if [ ${LETTER^^} = "T" ]; then let "_SIZE=$_SIZE*1024000000000"; fi
+  if [ ${LETTER^^} = "E" ]; then let "_SIZE=$_SIZE*1024000000000000"; fi
 fi
+
+echo _FNAME=$_FNAME
+_FNAME_0="${_FNAME:0:1}"
+if [ "$_FNAME_0" = "/" ]; then
+  _FNAME=$(echo "$_FNAME" | sed -r "s ^/(.*)/$ \1 ")
+else
+  _FNAME=$(echo "$_FNAME" | sed -r "s \*\..*$ \0$ ;s \. \\\\. ;s \* .* ;s \? . ")
+fi
+echo _FNAME=$_FNAME
 
 if [ ! -z "$_DIR" ]; then
   _DIR=$(echo $_DIR|sed -r 's\\/|/(^|$|\\/)g')
@@ -62,9 +72,9 @@ git log --pretty="%H %aI %s" --topo-order | while read -r commithash date messag
       fi
       
       # filtering by name
-      fname=$(basename "$path")
-      if [ ! -z "$FNAME" ]; then
-        echo "$fname" | sed -r "/$FNAME/I!{q100}" > nul
+      _FNAME=$(basename "$path")
+      if [ ! -z "$_FNAME" ]; then
+        echo "$_FNAME" | sed -r "/$_FNAME/I!{q100}" > nul
         retVal=$?
         #echo retVal=$retVal
         if [ $retVal -eq 100 ]; then
@@ -74,10 +84,10 @@ git log --pretty="%H %aI %s" --topo-order | while read -r commithash date messag
       
       # filtering by size
       objsize=$(git cat-file -s "$commithash:$path")
-      [ $objsize -lt $BIG ] && continue
+      [ $objsize -lt $_SIZE ] && continue
       
       # displaying result
-      if [ -z $SINGLE_LINE ]; then
+      if [ -z $_SL ]; then
         [ $_iter -eq 0 ] && echo -e "\n"$blue"$commithash"$cdef"\t"$dkblue$date"\n"$red"$message"$cdef
         [ -z "$directory" ] && __dir_name="" || __dir_name=$dkgray$(dirname "$path")$cdef"/"
         echo $__dir_name$white$(basename "$path")" "$yellow"$objsize"$cdef
