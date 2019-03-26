@@ -73,8 +73,8 @@ if [ -z "$_KEEP_BRANCHES" ]; then
   git branch -D b3
 fi
 
+_RET_CODE=0
 if [ ! -z "$_ASSERT" ]; then
-  _RET_CODE=0
   test -e "c.txt" || _RET_CODE=1
   test -e "d1/a.txt" || _RET_CODE=1
   test -e "d1/a2.txt" || _RET_CODE=1

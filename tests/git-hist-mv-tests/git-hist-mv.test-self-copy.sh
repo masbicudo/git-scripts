@@ -49,9 +49,8 @@ if [ -z "$_KEEP_BRANCHES" ]; then
   git branch -D b1
 fi
 
+_RET_CODE=0
 if [ ! -z "$_ASSERT" ]; then
-  _RET_CODE=0
-  echo $PWD
   test -e "a.txt" || _RET_CODE=1
   test -e "sd/a2.txt" || _RET_CODE=1
   test -e "sd2/a2.txt" || _RET_CODE=1
