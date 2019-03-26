@@ -64,7 +64,7 @@ git log --pretty="%H %aI %s" --topo-order | while read -r commithash date messag
       directory=$(dirname "$path")
       if [ "$directory" = "." ]; then directory=""; fi
       if [ ! -z "$_DIR" ]; then
-        echo "$directory" | sed -r "/$_DIR/I!{q100}" > nul
+        echo "$directory" | sed -r "/$_DIR/I!{q100}" &>/dev/null
         retVal=$?
         if [ $retVal -eq 100 ]; then
           continue
@@ -74,7 +74,7 @@ git log --pretty="%H %aI %s" --topo-order | while read -r commithash date messag
       # filtering by name
       _FNAME=$(basename "$path")
       if [ ! -z "$_FNAME" ]; then
-        echo "$_FNAME" | sed -r "/$_FNAME/I!{q100}" > nul
+        echo "$_FNAME" | sed -r "/$_FNAME/I!{q100}" &>/dev/null
         retVal=$?
         #echo retVal=$retVal
         if [ $retVal -eq 100 ]; then
