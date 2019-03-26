@@ -51,10 +51,10 @@ fi
 
 _RET_CODE=0
 if [ ! -z "$_ASSERT" ]; then
-  test -e "a.ipynb" || (_RET_CODE=1;echo a not found!)
-  test -e "b.ipynb" || (_RET_CODE=1;echo a not found!)
-  [ "$_RET_CODE" -eq "0" ] && (diff "a.ipynb" "../a.ipynb" >/dev/null 2>&1) && (_RET_CODE=1;echo a unchanged!)
-  [ "$_RET_CODE" -eq "0" ] && (diff "b.ipynb" "../b.ipynb" >/dev/null 2>&1) && (_RET_CODE=1;echo a unchanged!)
+  test -e "a.ipynb" || { _RET_CODE=1; echo "a not found!"; }
+  test -e "b.ipynb" || { _RET_CODE=1; echo "b not found!"; }
+  [ "$_RET_CODE" -eq "0" ] && (diff "a.ipynb" "../a.ipynb" >/dev/null 2>&1) && { _RET_CODE=1; echo "a unchanged!"; }
+  [ "$_RET_CODE" -eq "0" ] && (diff "b.ipynb" "../b.ipynb" >/dev/null 2>&1) && { _RET_CODE=1; echo "b unchanged!"; }
 fi
 
 popd

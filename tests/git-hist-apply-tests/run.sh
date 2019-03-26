@@ -8,7 +8,7 @@ echo $white"$test_group_name tests"$cdef
 function run() {
   "./$1" >/dev/null 2>&1
   _ERROR=$?
-  echo [$([ "$_ERROR" -eq "0" ] && echo $green" OK "$cdef || echo $red"FAIL"$cdef)] $2
+  echo [$([ "$_ERROR" -eq "0" ] && echo $green" OK "$cdef || echo $red"FAIL"$cdef)] "$2"
 }
 
-run git-hist-file-apply.sh "Applying nbstripout to *.ipynb files"
+run git-hist-apply-nbstripout.sh 'Applying nbstripout to *.ipynb files'
