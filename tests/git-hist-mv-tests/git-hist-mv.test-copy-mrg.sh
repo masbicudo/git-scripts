@@ -1,11 +1,17 @@
 #!/bin/bash
-echo -e "\e[91m""git-hist-mv test-repo-copy-mrg""\e[0m"
+test_name="test-repo-copy-mrg"
+
+echo -e "\e[91m""git-hist-mv $test_name""\e[0m"
+
+. ../shared/params.sh
 
 # initializing
 echo -e "\e[34m""initializing""\e[0m"
-rm -rf test-repo-copy-mrg
-mkdir test-repo-copy-mrg
-pushd test-repo-copy-mrg
+. ../shared/upsearch.sh
+git_hist_mv=$(upsearch "src/git-hist-mv.sh")
+rm -rf "$test_name"
+mkdir "$test_name"
+pushd "$test_name"
 git init
 
 # creating first branch
@@ -50,13 +56,23 @@ sleep 1
 # copying tree with merges - many parent timelines
 echo -e "\e[34m""copying tree with merges - many parent timelines""\e[0m"
   git branch b3m b3
-  ../../git-hist-mv.sh --copy "b1"    "b3m/d1"
-  ../../git-hist-mv.sh --copy "b2/sd" "b3m/d2"
+  "$git_hist_mv" --copy "b1"    "b3m/d1"
+  "$git_hist_mv" --copy "b2/sd" "b3m/d2"
 
 # cleanup
-echo -e "\e[34m""cleanup""\e[0m"
-git branch -D b1
-git branch -D b2
-git branch -D b3
+if [ -z "$_KEEP_BRANCHES" ]; then
+  echo -e "\e[34m""cleanup""\e[0m"
+  git branch -D b1
+  git branch -D b2
+  git branch -D b3
+fi
+
+_RET_CODE=0
+test -e "c.txt" || _RET_CODE=1
+test -e "d1/a.txt" || _RET_CODE=1
+test -e "d1/a2.txt" || _RET_CODE=1
+test -e "d2/b2.txt" || _RET_CODE=1
 
 popd
+[ -z "$_KEEP_FILES" ] && rm -rf "$test_name"
+exit $_RET_CODE
