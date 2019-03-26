@@ -3,7 +3,7 @@
 while [[ $# -gt 0 ]]
 do
   case "$1" in
-    -p|--prepare)        _PREP=TRUE         ;;
+    -p|--prepare)        _PREPARE=TRUE      ;;
     -e|--execute)        _EXEC=TRUE         ;;
     -a|--assert)         _ASSERT=TRUE       ;;
     -kf|--keep-files)    _KEEP_FILES=TRUE   ;;
@@ -13,8 +13,8 @@ do
   shift
 done
 
-if [ -z "$_PREP" ] && [ -z "$_EXEC" ] && [ -z "$_ASSERT" ]; then
-  _PREP=TRUE
+if [ -z "$_PREPARE" ] && [ -z "$_EXEC" ] && [ -z "$_ASSERT" ]; then
+  _PREPARE=TRUE
   _EXEC=TRUE
   _ASSERT=TRUE
 fi

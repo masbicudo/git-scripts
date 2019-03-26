@@ -32,7 +32,7 @@ if [ ! -z "$_PREPARE" ]; then
 
   sleep 1
 else
-  pushd "$test_name"
+  pushd "$test_name" || exit
 fi
 
 # executing nbstripout

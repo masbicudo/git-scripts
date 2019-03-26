@@ -33,7 +33,7 @@ if [ ! -z "$_PREPARE" ]; then
 
   sleep 1
 else
-  pushd "$test_name"
+  pushd "$test_name" || exit
 fi
 
 # copying subdirectory in history - zip parent timelines with rebase
