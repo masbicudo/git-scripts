@@ -26,9 +26,9 @@ do
   case $key in
     -sl|--single-line) _SL=TRUE;;
     -fn|--file-name)   _FNAME=$2;  shift;;
-    -d|--dir)          _DIR=$2;   shift;;
-    -sz|--size)        _SIZE=$2;    shift;;
-    *)                                 ;;
+    -d|--dir)          _DIR=$2;    shift;;
+    -sz|--size)        _SIZE=$2;   shift;;
+    *)                                  ;;
   esac
   shift
 done
@@ -43,14 +43,12 @@ if [[ "$_SIZE" =~ ^[0-9]+[KMGTEkmgte][Bb]$ ]]; then
   if [ ${LETTER^^} = "E" ]; then let "_SIZE=$_SIZE*1024000000000000"; fi
 fi
 
-echo _FNAME=$_FNAME
 _FNAME_0="${_FNAME:0:1}"
 if [ "$_FNAME_0" = "/" ]; then
   _FNAME=$(echo "$_FNAME" | sed -r "s ^/(.*)/$ \1 ")
 else
   _FNAME=$(echo "$_FNAME" | sed -r "s \*\..*$ \0$ ;s \. \\\\. ;s \* .* ;s \? . ")
 fi
-echo _FNAME=$_FNAME
 
 if [ ! -z "$_DIR" ]; then
   _DIR=$(echo $_DIR|sed -r 's\\/|/(^|$|\\/)g')
