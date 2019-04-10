@@ -30,10 +30,17 @@ done
 
 echo -e "\e[92m""git-hist-mv ""\e[32m""$ver""\e[0m"
 
-src_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_1")"
-src_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_1")"
-dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
-dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
+if [ -z "$arg_3" ] || [ -z "$arg_4" ]; then
+  src_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_1")"
+  src_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_1")"
+  dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
+  dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
+else
+  src_branch="$(sed 's \\ \/ g' <<< "$arg_1")"
+  src_dir="$(sed 's \\ \/ g' <<< "$arg_2")"
+  dst_branch="$(sed 's \\ \/ g' <<< "$arg_3")"
+  dst_dir="$(sed 's \\ \/ g' <<< "$arg_4")"
+fi
 
 cl_name="\e[38;5;146m"
 cl_value="\e[38;5;186m"
