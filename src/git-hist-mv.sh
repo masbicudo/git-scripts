@@ -28,13 +28,50 @@ case $i in
 esac
 done
 
+function get_branch_and_dir {
+  arg_1=$(sed 's \\ / g' <<< "$1")
+
+  branch=$(
+    git for-each-ref refs/heads --format='%(refname)' | sed 's refs/heads/  g' | while read x
+    do
+      arg_1=$(sed 's /*$ / g' <<< "$arg_1")
+      arg_1_split=$(sed 's ^'"$x"'/  g' <<< "$arg_1")
+      if [ "$arg_1" != "$arg_1_split" ]
+      then
+        echo $x
+        break
+      fi
+    done
+  )
+  echo $branch
+
+  inner_path=$(sed 's '"$branch"'/\?  g' <<< "$arg_1")
+  echo $inner_path
+}
+
 echo -e "\e[92m""git-hist-mv ""\e[32m""$ver""\e[0m"
 
-if [ -z "$arg_3" ] || [ -z "$arg_4" ]; then
-  src_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_1")"
-  src_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_1")"
-  dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
-  dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
+if [ -z "$arg_3" ] && [ -z "$arg_4" ]; then
+  unset -v src_branch src_dir
+  { IFS= read -r src_branch && IFS= read -r src_dir; } <<< "$(get_branch_and_dir "$arg_1")"
+  unset -v dst_branch dst_dir
+  { IFS= read -r dst_branch && IFS= read -r dst_dir; } <<< "$(get_branch_and_dir "$arg_2")"
+  
+  if [ -z "$src_branch" ]
+  then
+    >&2 echo -e "\e[91m""Invalid usage, cannot determine the source branch""\e[0m"
+    exit 1
+  fi
+  source_branch_exists=TRUE
+  if [ -z "$dst_branch" ]
+  then
+    dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
+    dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
+  fi
+
+elif [ ! -z "$arg_3" ] && [ -z "$arg_4" ]; then
+  >&2 echo -e "\e[91m""Invalid usage, must specify 2 or 4 ordinal params""\e[0m"
+  exit 1
 else
   src_branch="$(sed 's \\ \/ g' <<< "$arg_1")"
   src_dir="$(sed 's \\ \/ g' <<< "$arg_2")"
@@ -51,6 +88,14 @@ echo -e "$cl_name"dst_dir"\e[0m"="$cl_value"$dst_dir"\e[0m"
 echo -e "$cl_name"ZIP"\e[0m"="$cl_value"$ZIP"\e[0m"
 echo -e "$cl_name"COPY"\e[0m"="$cl_value"$COPY"\e[0m"
 echo -e "$cl_name"DEL"\e[0m"="$cl_value"$DEL"\e[0m"
+
+if [ -z "$source_branch_exists" ]; then
+  if ! git show-ref --verify --quiet refs/heads/$src_branch
+  then
+    >&2 echo -e "\e[91m""Invalid usage, source branch does not exist""\e[0m"
+    exit 1
+  fi
+fi
 
 if [ -z "$src_branch" ]; then
   >&2 echo -e "\e[91m""Invalid usage, must specify source branch""\e[0m"
