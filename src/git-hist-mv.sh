@@ -3,8 +3,16 @@ ver=v0.3.0
 ZIP=NO
 COPY=NO
 DEL=NO
+SIMULATE=NO
 argc=0
-echo $@
+
+dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
+cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
+dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
+
+echo -e "$green""git-hist-mv ""$dkgreen""$ver""$cdef"
+
+echo $dkgray$0 $@$cdef
 for i in "$@"
 do
 case $i in
@@ -20,6 +28,10 @@ case $i in
     COPY=YES
     shift
     ;;
+    --simulate|-s)
+    SIMULATE=YES
+    shift
+    ;;
     *)
     ((argc=argc+1))
     eval "arg_$argc=$i"
@@ -29,6 +41,10 @@ esac
 done
 
 function get_branch_and_dir {
+  # Separates a "branch/path' specifier into a branch and a path.
+  # This will print two lines, the 1st is the branch name, the 2nd is the path.
+  # If the branch does not exist in the repository, then branch and path
+  # are returned empty.
   arg_1=$(sed 's \\ / g' <<< "$1")
 
   branch=$(
@@ -49,14 +65,12 @@ function get_branch_and_dir {
   echo $inner_path
 }
 
-echo -e "\e[92m""git-hist-mv ""\e[32m""$ver""\e[0m"
-
 if [ -z "$arg_3" ] && [ -z "$arg_4" ]; then
   unset -v src_branch src_dir
-  { IFS= read -r src_branch && IFS= read -r src_dir; } <<< "$(get_branch_and_dir "$arg_1")"
+  { IFS= read -r src_branch && IFS= read -r src_dir; } < <(get_branch_and_dir "$arg_1")
   unset -v dst_branch dst_dir
-  { IFS= read -r dst_branch && IFS= read -r dst_dir; } <<< "$(get_branch_and_dir "$arg_2")"
-  
+  { IFS= read -r dst_branch && IFS= read -r dst_dir; } < <(get_branch_and_dir "$arg_2")
+
   if [ -z "$src_branch" ]
   then
     >&2 echo -e "\e[91m""Invalid usage, cannot determine the source branch""\e[0m"
@@ -88,6 +102,9 @@ echo -e "$cl_name"dst_dir"\e[0m"="$cl_value"$dst_dir"\e[0m"
 echo -e "$cl_name"ZIP"\e[0m"="$cl_value"$ZIP"\e[0m"
 echo -e "$cl_name"COPY"\e[0m"="$cl_value"$COPY"\e[0m"
 echo -e "$cl_name"DEL"\e[0m"="$cl_value"$DEL"\e[0m"
+if [ "$SIMULATE" == "YES" ]; then
+  echo -e "$cl_name"SIMULATE"\e[0m"="$cl_value"$SIMULATE"\e[0m"
+fi
 
 if [ -z "$source_branch_exists" ]; then
   if ! git show-ref --verify --quiet refs/heads/$src_branch
@@ -120,6 +137,11 @@ fi
 if [ "$DEL" == "YES" ] && [ ! -z "$dst_branch" ]; then
   >&2 echo -e "\e[91m""Invalid usage, destination branch must be empty when using --del or -d""\e[0m"
   exit 1
+fi
+
+if [ "$SIMULATE" == "YES" ]; then
+  echo -e "$red"Exiting simulation!"$cdef"
+  exit 2
 fi
 
 if [ "$DEL" == "NO" ]; then
