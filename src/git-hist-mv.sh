@@ -139,9 +139,11 @@ if [ "$DEL" == "YES" ] && [ ! -z "$dst_branch" ]; then
   exit 1
 fi
 
-if [ "$SIMULATE" == "YES" ]; then
-  echo -e "$red"Exiting simulation!"$cdef"
-  exit 2
+if [ "$SIMULATE" == "YES" ]
+then
+  function git {
+    echo git "$@"
+  }
 fi
 
 if [ "$DEL" == "NO" ]; then
@@ -165,11 +167,11 @@ if [ "$COPY" == "NO" ]; then
   fi
   # deleting 'original' branches (git creates these as backups)
   git update-ref -d refs/original/refs/heads/$src_branch
-  
-  # if we are only deleting something, then we are done
-  if [ "$DEL" == "YES" ]; then
-    exit 0
-  fi
+fi
+
+# if we are only deleting something, then we are done
+if [ "$DEL" == "YES" ]; then
+  exit 0
 fi
 
 # moving subdirectory to root with --subdirectory-filter
@@ -188,15 +190,18 @@ git filter-branch -f --prune-empty --index-filter '
 git update-ref -d refs/original/refs/heads/_temp
 
 # getting commit hashes and datetimes
-if [ "$ZIP" == "YES" ]; then
-  local commit1=0 datetime1=0 commit2=0 datetime2=0
+local commit1=0 datetime1=0 commit2=0 datetime2=0
+#cannot simulate these commands
+if [ "$SIMULATE" == "NO" ]; then
   { read commit1 datetime1 ; } < <(
     git log --reverse --max-parents=0 --format="%H %at" $dst_branch | head -1
   )
   { read commit2 datetime2 ; } < <(
     git log --reverse --max-parents=0 --format="%H %at" _temp | head -1
   )
-  declare rebase_hash=0
+fi
+declare rebase_hash="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+if [ "$datetime1" -gt 0 ] && [ "$datetime2" -gt 0 ]; then
   if [ "$datetime1" -gt "$datetime2" ]; then
     git log --before $datetime1 --format="%H" -n 1 _temp
     rebase_hash=`git log --before $datetime1 --format="%H" -n 1 _temp`
