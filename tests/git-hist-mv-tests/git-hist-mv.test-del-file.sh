@@ -1,11 +1,10 @@
 #!/bin/bash
-test_name="test-repo-self-ren"
+test_name="test-repo-del"
 
 echo -e "\e[91m""git-hist-mv $test_name""\e[0m"
 
-. ../shared/params.sh
-. ../shared/upsearch.sh
-. ../shared/check.sh
+. ../shared/params.sh || exit 1
+. ../shared/upsearch.sh || exit 1
 git_hist_mv=$(upsearch "src/git-hist-mv.sh")
 
 if [ ! -z "$_PREPARE" ]; then
@@ -29,19 +28,23 @@ if [ ! -z "$_PREPARE" ]; then
 
     mkdir sd
     touch sd/a2.txt
+    touch sd/a3.txt
     git add -A
-    git commit -a -m "added sd/a2.txt"
+    git commit -a -m "added sd/a2.txt and sd/a3.txt"
 
   sleep 1
 else
   pushd "$test_name" || exit
 fi
 
-# renaming subdirectory in history - zip parent timelines with rebase
+exit 0
+
+# deleting a file from the branch history
 if [ ! -z "$_EXEC" ]; then
-  echo -e "\e[34m""renaming subdirectory in history - zip parent timelines with rebase""\e[0m"
+  echo -e "\e[34m""deleting a file from the branch history""\e[0m"
     git branch b1s b1
-    "$git_hist_mv" "b1s/sd" "b1s/sd2" --zip
+    "$git_hist_mv" --del "b1s/sd/a2.txt"
+    git checkout b1s
 fi
 
 # cleanup
@@ -52,9 +55,9 @@ fi
 
 _RET_CODE=0
 if [ ! -z "$_ASSERT" ]; then
-  check -e  "a.txt" || _RET_CODE=1
-  check -ne "sd/a2.txt" || _RET_CODE=1
-  check -e  "sd2/a2.txt" || _RET_CODE=1
+  test -e "a.txt" || _RET_CODE=1
+  test -e "sd/a2.txt" || _RET_CODE=1
+  test -e "sd/a3.txt" && _RET_CODE=1
 fi
 
 popd

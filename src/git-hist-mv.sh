@@ -1,20 +1,30 @@
 #!/bin/bash
-ver=v0.3.0
+ver=v0.3.2
+
+# argument variables
 ZIP=NO
 COPY=NO
 DEL=NO
 SIMULATE=NO
 HELP=NO
 NOINFO=NO
+LINENUM=NO
+
+# reading arguments
+all_args=
+if [ "$*" == "" ]; then
+  # if there are no arguments, then show help
+  HELP=YES
+fi
 argc=0
-
-dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
-cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
-dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
-
 for i in "$@"
 do
-case $i in
+  if [ "${i// /}" == "$i" ]; then
+    all_args="$all_args ${i//\'/\"\'\"}"
+  else
+    all_args="$all_args '${i//\'/\'\"\'\"\'}'"
+  fi
+  case $i in
     --delete|--del|-d)
     DEL=YES
     shift
@@ -39,24 +49,30 @@ case $i in
     NOINFO=YES
     shift
     ;;
-    *)
-    ((argc=argc+1))
-    eval "arg_$argc=$i"
+    --linenum)
+    LINENUM=YES
     shift
     ;;
-esac
+    *)
+    ((argc=argc+1))
+    eval "arg_$argc='${i//\'/\'\"\'\"\'}'"
+    shift
+    ;;
+  esac
 done
 
-if [ "$*" == "" ]; then
-  # if there are no arguments, then show help
-  HELP=YES
-fi
+# color variables
+dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
+cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
+dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
 
+# display some info
 if [ "$NOINFO" == "NO" ]; then
   echo -e "$blue""git-hist-mv ""$dkyellow""$ver""$cdef"
-  echo $dkgray$0 $@$cdef
+  echo $dkgray$0$all_args$cdef
 fi
 
+# help screen
 cl_op=$blue
 cl_colons=$dkgray
 if [ "$HELP" == "YES" ]; then
@@ -64,18 +80,22 @@ if [ "$HELP" == "YES" ]; then
   echo "Usage: "$dkgray"$0 "$cl_op"["$dkyellow"source and target"$cl_op"] "$cl_op"["$dkyellow"options"$cl_op"]"$cdef""
   echo $cl_op"["$dkyellow"source and target"$cl_op"]"$cl_colons":"$cdef
   echo "  "Specify the source and target of the operation.
-  echo "  "They can be specified in two formats:
+  echo "  "They can be specified in three formats:
   echo "  "$cl_op"- "$dkyellow"Joined format"$cl_colons": "$white"branch/directory/filename"$cdef
   echo "    "$red"Example"$cl_colons": "
-  echo "      "$dkgray"$0"$yellow" 'some/branch/filename' 'new-branch/dir/fname.txt'"
+  echo "      "$dkgray"$0"$yellow" 'some/branch/filename' 'other-branch/dir/fname.txt'"
   echo "    "$dkgreen"Note"$cl_colons": "$cdef
   echo "      Branch names containing '/' can be recognized if they actually exist."
-  echo "      If you want to use a branch name with '/' that doesn't exist,"
-  echo "      you must use the separated format."
-  echo "      In the previous example, 'some/branch' must exist in the local repo."
+  echo "      The joined format only supports branches that exist."
+  echo "      In the previous example, 'some/branch' and 'other-branch' must both"
+  echo "      exist in the local repo."
   echo "  "$cl_op"- "$dkyellow"Separated format"$cl_colons": "$white"branch first then directory/filename"$cdef
   echo "    "$red"Example"$cl_colons": "
   echo "      "$dkgray"$0"$yellow" 'some/branch' 'filename' 'new-branch' 'dir/fname.txt'"
+  echo "    "$dkgreen"Note"$cl_colons": "$cdef
+  echo "      Branch names containing '/' can be used even if they don't exist."
+  echo "      The separated format supports creating new branches."
+  echo "      In the previous example, 'new-branch' can be non-existent."
   echo "  "$dkgreen"Note"$cl_colons": "$cdef
   echo "    "If both source and target are specified, both must be in the same
   echo "    "format, that is, either 2 or 4 path arguments are supported. If 2, then
@@ -109,9 +129,13 @@ function get_branch_and_dir {
   )
   echo $branch
 
-  inner_path=$(sed 's '"$branch"'/\?  g' <<< "$arg_1")
-  echo $inner_path
+  inner_path=
+  if [ ! -z "$branch" ]; then
+    inner_path=`sed 's ^'"$branch"'/\?  g' <<< "$arg_1"`
+  fi
+  echo "$inner_path"
 }
+
 
 if [ -z "$arg_3" ] && [ -z "$arg_4" ]; then
   unset -v src_branch src_dir
@@ -143,15 +167,17 @@ fi
 
 cl_name="\e[38;5;146m"
 cl_value="\e[38;5;186m"
-echo -e "$cl_name"src_branch"\e[0m"="$cl_value"$src_branch"\e[0m"
-echo -e "$cl_name"src_dir"\e[0m"="$cl_value"$src_dir"\e[0m"
-echo -e "$cl_name"dst_branch"\e[0m"="$cl_value"$dst_branch"\e[0m"
-echo -e "$cl_name"dst_dir"\e[0m"="$cl_value"$dst_dir"\e[0m"
-echo -e "$cl_name"ZIP"\e[0m"="$cl_value"$ZIP"\e[0m"
-echo -e "$cl_name"COPY"\e[0m"="$cl_value"$COPY"\e[0m"
-echo -e "$cl_name"DEL"\e[0m"="$cl_value"$DEL"\e[0m"
-if [ "$SIMULATE" == "YES" ]; then
-  echo -e "$cl_name"SIMULATE"\e[0m"="$cl_value"$SIMULATE"\e[0m"
+if [ "$NOINFO" == "NO" ]; then
+  echo -e "$cl_name"src_branch"\e[0m"="$cl_value"$src_branch"\e[0m"
+  echo -e "$cl_name"src_dir"\e[0m"="$cl_value"$src_dir"\e[0m"
+  echo -e "$cl_name"dst_branch"\e[0m"="$cl_value"$dst_branch"\e[0m"
+  echo -e "$cl_name"dst_dir"\e[0m"="$cl_value"$dst_dir"\e[0m"
+  echo -e "$cl_name"ZIP"\e[0m"="$cl_value"$ZIP"\e[0m"
+  echo -e "$cl_name"COPY"\e[0m"="$cl_value"$COPY"\e[0m"
+  echo -e "$cl_name"DEL"\e[0m"="$cl_value"$DEL"\e[0m"
+  if [ "$SIMULATE" == "YES" ]; then
+    echo -e "$cl_name"SIMULATE"\e[0m"="$cl_value"$SIMULATE"\e[0m"
+  fi
 fi
 
 if [ -z "$source_branch_exists" ]; then
@@ -187,12 +213,28 @@ if [ "$DEL" == "YES" ] && [ ! -z "$dst_branch" ]; then
   exit 1
 fi
 
-if [ "$SIMULATE" == "YES" ]
-then
-  function git {
-    echo git "$@"
-  }
-fi
+_git=`which git`
+function git {
+  unset -v _all_args
+  for i in "$@"
+  do
+    if [ "${i// /}" == "$i" ] && [ "${i//
+/}" == "$i" ]; then
+      _all_args="$_all_args ${i//\'/\"\'\"}"
+    else
+      _all_args="$_all_args '${i//\'/\'\"\'\"\'}'"
+    fi
+  done
+  if [ "$SIMULATE" == "YES" ]
+  then
+    echo git "$_all_args"
+  else
+    if [ "$NOINFO" == "NO" ]; then
+      echo $blue"git"$yellow"$_all_args"$cdef
+    fi
+    eval "'$_git'"$_all_args
+  fi
+}
 
 if [ "$DEL" == "NO" ]; then
   # when not deleting a branch or a subfolder
@@ -209,12 +251,14 @@ if [ "$COPY" == "NO" ]; then
     ####  git rm --cached --ignore-unmatch -r -f '*'
     ####  ' -- $src_branch
   else
+    
     git filter-branch -f --prune-empty --index-filter '
-      git rm --cached --ignore-unmatch -r -f '$src_dir'
-      ' -- $src_branch
+      git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"'
+      ' -- "$src_branch"
   fi
   # deleting 'original' branches (git creates these as backups)
-  git update-ref -d refs/original/refs/heads/$src_branch
+  
+  git update-ref -d refs/original/refs/heads/"$src_branch"
 fi
 
 # if we are only deleting something, then we are done
@@ -224,13 +268,15 @@ fi
 
 # moving subdirectory to root with --subdirectory-filter
 if [ ! -z "$src_dir" ]; then
-  git filter-branch --prune-empty --subdirectory-filter $src_dir -- _temp
+  git filter-branch --prune-empty --subdirectory-filter "$src_dir" -- _temp
   # deleting 'original' branches (git creates these as backups)
   git update-ref -d refs/original/refs/heads/_temp
 fi
 
+__dst_dir="${dst_dir//\'/\'\"\'\"\'}"
+__dst_dir="${__dst_dir//\ /\\\ }"
 git filter-branch -f --prune-empty --index-filter '
-  PATHS=`git ls-files -s | sed "s \t\"* &'$dst_dir'/ "`
+  PATHS=`git ls-files -s | sed "s \t\"* &"'"'""$__dst_dir""'"'"/ "`;
   echo -n "$PATHS" |
     GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
     mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- _temp
@@ -238,11 +284,11 @@ git filter-branch -f --prune-empty --index-filter '
 git update-ref -d refs/original/refs/heads/_temp
 
 # getting commit hashes and datetimes
-local commit1=0 datetime1=0 commit2=0 datetime2=0
-#cannot simulate these commands
+declare commit1=0 datetime1=0 commit2=0 datetime2=0
 if [ "$SIMULATE" == "NO" ]; then
+  #cannot simulate these commands
   { read commit1 datetime1 ; } < <(
-    git log --reverse --max-parents=0 --format="%H %at" $dst_branch | head -1
+    git log --reverse --max-parents=0 --format="%H %at" "$dst_branch" | head -1
   )
   { read commit2 datetime2 ; } < <(
     git log --reverse --max-parents=0 --format="%H %at" _temp | head -1
@@ -254,16 +300,17 @@ if [ "$datetime1" -gt 0 ] && [ "$datetime2" -gt 0 ]; then
     git log --before $datetime1 --format="%H" -n 1 _temp
     rebase_hash=`git log --before $datetime1 --format="%H" -n 1 _temp`
   else
-    git log --before $datetime2 --format="%H" -n 1 $dst_branch
+    git log --before $datetime2 --format="%H" -n 1 "$dst_branch"
     rebase_hash=`git log --before $datetime2 --format="%H" -n 1 $dst_branch`
   fi
 fi
 
 # need to checkout because merge may result in conficts
 # it is a requirement of the merge command
-git checkout $dst_branch 2>/dev/null || {
-  git checkout --orphan $dst_branch
-  git rm -rf .
+git checkout "$dst_branch" 2>/dev/null || {
+  git checkout --orphan "$dst_branch"
+  #git rm -rf .
+  git rm -r .
 }
 
 git merge --allow-unrelated-histories --no-edit -m "Merge branch '$src_branch' into '$dst_branch'" _temp;
