@@ -4,19 +4,18 @@ ZIP=NO
 COPY=NO
 DEL=NO
 SIMULATE=NO
+HELP=NO
+NOINFO=NO
 argc=0
 
 dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
 cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
 dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
 
-echo -e "$green""git-hist-mv ""$dkgreen""$ver""$cdef"
-
-echo $dkgray$0 $@$cdef
 for i in "$@"
 do
 case $i in
-    --del|-d)
+    --delete|--del|-d)
     DEL=YES
     shift
     ;;
@@ -28,8 +27,16 @@ case $i in
     COPY=YES
     shift
     ;;
-    --simulate|-s)
+    --simulate|--sim|-s)
     SIMULATE=YES
+    shift
+    ;;
+    --help|-h)
+    HELP=YES
+    shift
+    ;;
+    --noinfo)
+    NOINFO=YES
     shift
     ;;
     *)
@@ -39,6 +46,47 @@ case $i in
     ;;
 esac
 done
+
+if [ "$*" == "" ]; then
+  # if there are no arguments, then show help
+  HELP=YES
+fi
+
+if [ "$NOINFO" == "NO" ]; then
+  echo -e "$blue""git-hist-mv ""$dkyellow""$ver""$cdef"
+  echo $dkgray$0 $@$cdef
+fi
+
+cl_op=$blue
+cl_colons=$dkgray
+if [ "$HELP" == "YES" ]; then
+  echo -e "$white""# Help""$cdef"
+  echo "Usage: "$dkgray"$0 "$cl_op"["$dkyellow"source and target"$cl_op"] "$cl_op"["$dkyellow"options"$cl_op"]"$cdef""
+  echo $cl_op"["$dkyellow"source and target"$cl_op"]"$cl_colons":"$cdef
+  echo "  "Specify the source and target of the operation.
+  echo "  "They can be specified in two formats:
+  echo "  "$cl_op"- "$dkyellow"Joined format"$cl_colons": "$white"branch/directory/filename"$cdef
+  echo "    "$red"Example"$cl_colons": "
+  echo "      "$dkgray"$0"$yellow" 'some/branch/filename' 'new-branch/dir/fname.txt'"
+  echo "    "$dkgreen"Note"$cl_colons": "$cdef
+  echo "      Branch names containing '/' can be recognized if they actually exist."
+  echo "      If you want to use a branch name with '/' that doesn't exist,"
+  echo "      you must use the separated format."
+  echo "      In the previous example, 'some/branch' must exist in the local repo."
+  echo "  "$cl_op"- "$dkyellow"Separated format"$cl_colons": "$white"branch first then directory/filename"$cdef
+  echo "    "$red"Example"$cl_colons": "
+  echo "      "$dkgray"$0"$yellow" 'some/branch' 'filename' 'new-branch' 'dir/fname.txt'"
+  echo "  "$dkgreen"Note"$cl_colons": "$cdef
+  echo "    "If both source and target are specified, both must be in the same
+  echo "    "format, that is, either 2 or 4 path arguments are supported. If 2, then
+  echo "    "format is joined, if 4, then format is separated.
+  echo $cl_op"["$dkyellow"options"$cl_op"]"$cl_colons":"
+  echo "  "$yellow"--zip "$cl_op"or "$yellow"-z"$cl_colons":"                                $white"merge timelines"
+  echo "  "$yellow"--copy "$cl_op"or "$yellow"-c"$cl_colons":"                               $white"copy instead of move"
+  echo "  "$yellow"--delete "$cl_op"or "$yellow"--del "$cl_op"or "$yellow"-d"$cl_colons":"   $white"delete instead of move"
+  echo "  "$yellow"--simulate "$cl_op"or "$yellow"--sim "$cl_op"or "$yellow"-s"$cl_colons":" $white"show all git commands instead of executing them"
+  exit 0
+fi
 
 function get_branch_and_dir {
   # Separates a "branch/path' specifier into a branch and a path.
