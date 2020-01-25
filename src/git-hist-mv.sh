@@ -8,7 +8,6 @@ DEL=NO
 SIMULATE=NO
 HELP=NO
 NOINFO=NO
-LINENUM=NO
 
 # reading arguments
 all_args=
@@ -47,10 +46,6 @@ do
     ;;
     --noinfo)
     NOINFO=YES
-    shift
-    ;;
-    --linenum)
-    LINENUM=YES
     shift
     ;;
     *)
@@ -212,13 +207,15 @@ if [ "$DEL" == "YES" ] && [ ! -z "$dst_branch" ]; then
   exit 1
 fi
 
-_git=`which git`
+# replacing git command with a custom function to intercept all git commands
+declare newline="
+"
+declare _git=`which git`
 function git {
   unset -v _all_args
   for i in "$@"
   do
-    if [ "${i// /}" == "$i" ] && [ "${i//
-/}" == "$i" ]; then
+    if [ "${i// /}" == "$i" ] && [ "${i//$newline/}" == "$i" ]; then
       _all_args="$_all_args ${i//\'/\"\'\"}"
     else
       _all_args="$_all_args '${i//\'/\'\"\'\"\'}'"
@@ -235,6 +232,15 @@ function git {
   fi
 }
 
+# General logic:
+# 1) create a temporary branch based on the source branch
+# 2) alter the source branch when moving or deleting files, by deleting the source directory
+# 3) alter the temporary branch by moving the source directory to the root, deleting everything else
+# 4) alter the temporary branch by moving the root to the destination directory
+# 5) merge temporary directory into the destination branch
+# 6) zip histories of destination branch
+
+# creating a temporary branch based on the source branch if needed
 if [ "$DEL" == "NO" ]; then
   # when not deleting a branch or a subfolder
   # the _temp branch is needed to do manipulations
@@ -244,19 +250,16 @@ fi
 # if not copying, delete source files
 if [ "$COPY" == "NO" ]; then
   if [ -z "$src_dir" ]; then
+    # removing the branch, since source directory is the root
     git branch -D $src_branch
     ZIP=
-    ####git filter-branch -f --prune-empty --index-filter '
-    ####  git rm --cached --ignore-unmatch -r -f '*'
-    ####  ' -- $src_branch
   else
-    
-    git filter-branch -f --prune-empty --index-filter '
+    # removing source directory from the source branch
+    git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
       git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"'
       ' -- "$src_branch"
   fi
   # deleting 'original' branches (git creates these as backups)
-  
   git update-ref -d refs/original/refs/heads/"$src_branch"
 fi
 
@@ -267,14 +270,15 @@ fi
 
 # moving subdirectory to root with --subdirectory-filter
 if [ ! -z "$src_dir" ]; then
-  git filter-branch --prune-empty --subdirectory-filter "$src_dir" -- _temp
+  git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- _temp
   # deleting 'original' branches (git creates these as backups)
   git update-ref -d refs/original/refs/heads/_temp
 fi
 
-__dst_dir="${dst_dir//\'/\'\"\'\"\'}"
+# moving the files to the target directory
+declare __dst_dir="${dst_dir//\'/\'\"\'\"\'}"
 __dst_dir="${__dst_dir//\ /\\\ }"
-git filter-branch -f --prune-empty --index-filter '
+git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
   PATHS=`git ls-files -s | sed "s \t\"* &"'"'""$__dst_dir""'"'"/ "`;
   echo -n "$PATHS" |
     GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&

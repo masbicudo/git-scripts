@@ -10,9 +10,9 @@
 #
 # usage examples:
 # - find files larger than 10MB:
-#      ./git-hist-file-size.sh -sz 10MB
+#      ./git-hist-file-filter.sh -sz 10MB
 # - show one file per line:
-#      ./git-hist-file-size.sh -sz 10kb -sl
+#      ./git-hist-file-filter.sh -sz 10kb -sl
 
 _SIZE=0
 
