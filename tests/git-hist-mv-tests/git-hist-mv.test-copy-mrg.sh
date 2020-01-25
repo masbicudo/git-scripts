@@ -5,6 +5,7 @@ echo -e "\e[91m""git-hist-mv $test_name""\e[0m"
 
 . ../shared/params.sh
 . ../shared/upsearch.sh
+. ../shared/check.sh
 git_hist_mv=$(upsearch "src/git-hist-mv.sh")
 
 if [ ! -z "$_PREPARE" ]; then
@@ -75,10 +76,10 @@ fi
 
 _RET_CODE=0
 if [ ! -z "$_ASSERT" ]; then
-  test -e "c.txt" || _RET_CODE=1
-  test -e "d1/a.txt" || _RET_CODE=1
-  test -e "d1/a2.txt" || _RET_CODE=1
-  test -e "d2/b2.txt" || _RET_CODE=1
+  check -e "c.txt" || _RET_CODE=1
+  check -e "d1/a.txt" || _RET_CODE=1
+  check -e "d1/a2.txt" || _RET_CODE=1
+  check -e "d2/b2.txt" || _RET_CODE=1
 fi
 
 popd

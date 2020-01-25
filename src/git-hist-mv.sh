@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=v0.3.2
+ver=v0.3.3
 
 # argument variables
 ZIP=NO
@@ -307,13 +307,19 @@ fi
 
 # need to checkout because merge may result in conficts
 # it is a requirement of the merge command
-git checkout "$dst_branch" 2>/dev/null || {
-  git checkout --orphan "$dst_branch"
-  #git rm -rf .
-  git rm -r .
-}
-
-git merge --allow-unrelated-histories --no-edit -m "Merge branch '$src_branch' into '$dst_branch'" _temp;
+if git checkout "$dst_branch" 2>/dev/null
+then
+  declare _cur_branch=
+  _cur_branch=`git branch --show-current`
+  echo Current branch is: $_cur_branch
+  git merge --allow-unrelated-histories --no-edit -m "Merge branch '$src_branch' into '$dst_branch'" _temp;
+else
+  #git checkout --orphan "$dst_branch"
+  #git rm -r .
+  ##git rm -rf .
+  git branch "$dst_branch" _temp
+  git checkout "$dst_branch"
+fi
 
 # zipping timelines:
 if [ "$ZIP" == "YES" ]; then
