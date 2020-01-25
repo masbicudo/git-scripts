@@ -17,6 +17,7 @@ if [ ! -z "$1" ]; then
 fi
 
 run git-hist-mv.test-copy-mrg.sh "Copying a directory from one branch history to another with merge"
+run git-hist-mv.test-copy-to-root.sh "Copying a directory from one branch history to the root of another new branch"
 run git-hist-mv.test-copy-zip.sh "Copying a directory from one branch history to another with rebase"
 run git-hist-mv.test-del.sh "Deleting a directory from the branch history"
 run git-hist-mv.test-del-file.sh "Deleting a file from the branch history"

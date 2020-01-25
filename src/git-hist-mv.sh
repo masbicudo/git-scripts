@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=v0.3.3
+ver=v0.3.4
 
 # argument variables
 ZIP=NO
@@ -19,7 +19,7 @@ fi
 argc=0
 for i in "$@"
 do
-  if [ "${i// /}" == "$i" ]; then
+  if [ "${i// /}" == "$i" ] && [ ! -z "$i" ]; then
     all_args="$all_args ${i//\'/\"\'\"}"
   else
     all_args="$all_args '${i//\'/\'\"\'\"\'}'"
@@ -136,8 +136,7 @@ function get_branch_and_dir {
   echo "$inner_path"
 }
 
-
-if [ -z "$arg_3" ] && [ -z "$arg_4" ]; then
+if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
   unset -v src_branch src_dir
   { IFS= read -r src_branch && IFS= read -r src_dir; } < <(get_branch_and_dir "$arg_1")
   unset -v dst_branch dst_dir
@@ -155,7 +154,7 @@ if [ -z "$arg_3" ] && [ -z "$arg_4" ]; then
     dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
   fi
 
-elif [ ! -z "$arg_3" ] && [ -z "$arg_4" ]; then
+elif [ -v "arg_3" ] && [ ! -v "arg_4" ]; then
   >&2 echo -e "\e[91m""Invalid usage, must specify 2 or 4 ordinal params""\e[0m"
   exit 1
 else
