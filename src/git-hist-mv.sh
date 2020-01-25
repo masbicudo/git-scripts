@@ -16,6 +16,34 @@ if [ "$*" == "" ]; then
   HELP=YES
 fi
 argc=0
+while [[ $# -gt 0 ]]
+do
+  i="$1"
+  if [ "${i// /}" == "$i" ] && [ ! -z "$i" ]; then
+    all_args="$all_args ${i//\'/\"\'\"}"
+  else
+    all_args="$all_args '${i//\'/\'\"\'\"\'}'"
+  fi
+  case $i in
+    --file-name|-fn)      F_FNAME=$2    ;shift;;
+    --dir)                F_DIR=$2      ;shift;;
+    --min-size)           F_MIN_SIZE=$2 ;shift;;
+    --max-size)           F_MAX_SIZE=$2 ;shift;;
+    --delete|--del|-d)    DEL=YES             ;;
+    --zip|-z)             ZIP=YES             ;;
+    --copy|-c)            COPY=YES            ;;
+    --simulate|--sim|-s)  SIMULATE=YES        ;;
+    --help|-h)            HELP=YES            ;;
+    --noinfo)             NOINFO=YES          ;;
+    *)
+    ((argc=argc+1))
+    eval "arg_$argc='${i//\'/\'\"\'\"\'}'"
+    ;;
+  esac
+  shift
+done
+
+
 for i in "$@"
 do
   if [ "${i// /}" == "$i" ] && [ ! -z "$i" ]; then
@@ -23,37 +51,6 @@ do
   else
     all_args="$all_args '${i//\'/\'\"\'\"\'}'"
   fi
-  case $i in
-    --delete|--del|-d)
-    DEL=YES
-    shift
-    ;;
-    --zip|-z)
-    ZIP=YES
-    shift
-    ;;
-    --copy|-c)
-    COPY=YES
-    shift
-    ;;
-    --simulate|--sim|-s)
-    SIMULATE=YES
-    shift
-    ;;
-    --help|-h)
-    HELP=YES
-    shift
-    ;;
-    --noinfo)
-    NOINFO=YES
-    shift
-    ;;
-    *)
-    ((argc=argc+1))
-    eval "arg_$argc='${i//\'/\'\"\'\"\'}'"
-    shift
-    ;;
-  esac
 done
 
 # color variables
@@ -102,6 +99,29 @@ if [ "$HELP" == "YES" ]; then
   echo "  "$yellow"--simulate "$cl_op"or "$yellow"--sim "$cl_op"or "$yellow"-s"$cl_colons":" $white"show all git commands instead of executing them"
   exit 0
 fi
+
+function convert_to_bytes {
+  # Converts a number of data units into bytes:
+  # - Supports K, M, G, T, E
+  # - Case insensitive (K is the same as k, M as m, ...)
+  # - May be followed by B or b, or nothing (the B character is ignored)
+  # Examples:
+  #   10kb ->       10240
+  #    1M  ->     1024000
+  #   10gB -> 10240000000
+  __sz="$1"
+  if ! [[ "$__sz" =~ ^[0-9]+([KMGTEkmgte])?([Bb])?$ ]]; then return 1; fi
+  __un=$(echo $__sz | sed -r 's ^[0-9]+([KMGTE])?B?$ \1 gI')
+  __sz=$(echo $__sz | sed -r 's ^([0-9]+)[KMGTE]?B?$ \1 gI')
+  if   [ "${__un^^}" = "K" ]; then let "__sz=$__sz*1024";
+  elif [ "${__un^^}" = "M" ]; then let "__sz=$__sz*1024000";
+  elif [ "${__un^^}" = "G" ]; then let "__sz=$__sz*1024000000";
+  elif [ "${__un^^}" = "T" ]; then let "__sz=$__sz*1024000000000";
+  elif [ "${__un^^}" = "E" ]; then let "__sz=$__sz*1024000000000000";
+  fi
+  echo "$__sz"
+  return 0
+}
 
 function get_branch_and_dir {
   # Separates a "branch/path' specifier into a branch and a path.
@@ -230,6 +250,16 @@ function git {
     fi
     eval "'$_git'"$_all_args
   fi
+}
+
+function filter {
+  path="$1"
+  # filtering by size
+  objsize=$(git cat-file -s "$commithash:$path")
+  [ $objsize -lt $_SIZE ] && return 1
+
+  # return ok message (0 means no error ocurred)
+  return 0
 }
 
 # General logic:
