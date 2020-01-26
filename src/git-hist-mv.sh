@@ -303,13 +303,17 @@ function get_filtered_files_for_commit {
     done)
 }
 
+# ref: https://stackoverflow.com/a/10433783/195417
+contains_element () { for e in "${@:2}"; do [[ "$e" = "$1" ]] && return 0; done; return 1; }
+
 function filter_ls_files {
-  get_filtered_files_for_commit $GIT_COMMIT
+  if [ "$_has_filter" == 1 ]; then
+    readarray -t __files <<<"$(get_filtered_files_for_commit $GIT_COMMIT)"
+  fi
   git ls-files --stage | (
     while read mode sha stage path
     do
       # ref: https://git-scm.com/docs/git-update-index#_using_index_info
-      echo "m:$mode h:$sha s:$stage p:$path"
       # TODO: use printf or echo to output a line for each file
       # - to remove a file write:
       #     0 0000000000000000000000000000000000000000	file_name
@@ -317,6 +321,28 @@ function filter_ls_files {
       #     $mode $sha $stage	new_file_name
       # if $1 contains "-r" reverse the logic, remove selected files, and keed unselected files
       # if $1 contains "-m" move files from src_dir to dst_dir (hint: use sed to replace, if pattern not found, remove file)
+
+      # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
+      ! [ "$1" == "-r" ]; TEST_REMOVE=$?
+
+      # see: /kb/path_pattern.sh
+      if [[ ! "$path" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
+        TEST_SELECTED=0
+      elif [ "$_has_filter" == 1 ]; then
+        ! contains_element "$path" "${__files[@]}"; TEST_SELECTED=$?
+      else
+        TEST_SELECTED=1
+      fi
+
+      if [ $TEST_REMOVE -e $TEST_SELECTED ]; then
+        printf "0 0000000000000000000000000000000000000000\t$path\n"
+      else
+        if [ "$1" == "-m" ]; then
+          # see: /kb/path_pattern.sh
+          path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
+        fi
+        printf "$mode $sha $stage\t$path\n"
+      fi
     done
   )
 }
@@ -378,18 +404,16 @@ if [ "$DEL" == "YES" ]; then
   exit 0
 fi
 
-# if has filters, delete unselected files from the temporary branch
-# TODO
-# moving subdirectory to root with --subdirectory-filter
-if [ ! -z "$src_dir" ]; then
-  git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- _temp
-  # deleting 'original' branches (git creates these as backups)
-  git update-ref -d refs/original/refs/heads/_temp
-fi
+# # moving subdirectory to root with --subdirectory-filter
+# if [ ! -z "$src_dir" ]; then
+#   git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- _temp
+#   # deleting 'original' branches (git creates these as backups)
+#   git update-ref -d refs/original/refs/heads/_temp
+# fi
 
-# moving the files to the target directory
-declare __dst_dir="${dst_dir//\'/\'\"\'\"\'}"
-__dst_dir="${__dst_dir//\ /\\\ }"
+# # # # moving the files to the target directory
+# # # declare __dst_dir="${dst_dir//\'/\'\"\'\"\'}"
+# # # __dst_dir="${__dst_dir//\ /\\\ }"
 # using filter-branch with update-index to move files
 # - filter-branch iterates each commit
 # - update-index changes a file path in a commit
@@ -397,8 +421,9 @@ __dst_dir="${__dst_dir//\ /\\\ }"
 #     example output line:
 #       100644 9ff97a979712c881faa31edb5087c0e758ecfc05 0       dir_name/file_name.txt
 # - sed does the replacing of old-path with the new path
+# TODO: if dst_dir is empty, the following command does nothing
 git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-  PATHS=`git ls-files -s | sed "s \t\"* &"'"'""$__dst_dir""'"'"/ "`;
+  PATHS=`git ls-files -s | filter_ls_files -m`;
   echo -n "$PATHS" |
     GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
     mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- _temp
