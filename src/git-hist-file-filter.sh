@@ -54,7 +54,8 @@ if [ ! -z "$_DIR" ]; then
   _DIR=$(echo $_DIR|sed -r 's\\/|/(^|$|\\/)g')
 fi
 
-git log --pretty="%H %aI %s" --topo-order | while read -r commithash date message; do
+function get_filtered_files_for_commit {
+  commithash="$1"
   git diff-tree -r --name-only --diff-filter=AMT $commithash |
     tail -n +2 | (_iter=0; while read path; do
       
@@ -96,4 +97,8 @@ git log --pretty="%H %aI %s" --topo-order | while read -r commithash date messag
       fi
       let "_iter++"
     done)
+}
+
+git log --pretty="%H %aI %s" --topo-order | while read -r commithash date message; do
+  get_filtered_files_for_commit $commithash
 done

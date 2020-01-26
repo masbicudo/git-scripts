@@ -9,6 +9,21 @@ SIMULATE=NO
 HELP=NO
 NOINFO=NO
 
+function quote_arg {
+  if [[ $# -eq 0 ]]; then return 1; fi
+  # if argument 1 contains:
+  # - spaces or tabs
+  # - new lines
+  # - is empty
+  # then: needs to be quoted
+  if [[ ! "$1" =~ [[:blank:]] ]] && [ "${1//
+/}" == "$1" ] && [ ! -z "$1" ]
+  then echo "${1//\'/\"\'\"}"; 
+  else echo "'${1//\'/\'\"\'\"\'}'"
+  fi
+  return 0
+}
+
 # reading arguments
 all_args=
 if [ "$*" == "" ]; then
@@ -19,11 +34,7 @@ argc=0
 while [[ $# -gt 0 ]]
 do
   i="$1"
-  if [ "${i// /}" == "$i" ] && [ ! -z "$i" ]; then
-    all_args="$all_args ${i//\'/\"\'\"}"
-  else
-    all_args="$all_args '${i//\'/\'\"\'\"\'}'"
-  fi
+  all_args="$all_args $(quote_arg "$i")"
   case $i in
     --file-name|-fn)      F_FNAME=$2    ;shift;;
     --dir)                F_DIR=$2      ;shift;;
@@ -43,15 +54,11 @@ do
   shift
 done
 
-
-for i in "$@"
-do
-  if [ "${i// /}" == "$i" ] && [ ! -z "$i" ]; then
-    all_args="$all_args ${i//\'/\"\'\"}"
-  else
-    all_args="$all_args '${i//\'/\'\"\'\"\'}'"
-  fi
-done
+_has_filter=0
+if [ -v F_FNAME ] || [ -v F_DIR ] || [ -v F_MIN_SIZE ] || [ -v F_MAX_SIZE ]
+then
+  _has_filter=1
+fi
 
 # color variables
 dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
@@ -189,6 +196,11 @@ if [ "$NOINFO" == "NO" ]; then
   echo -e "$cl_name"ZIP"\e[0m"="$cl_value"$ZIP"\e[0m"
   echo -e "$cl_name"COPY"\e[0m"="$cl_value"$COPY"\e[0m"
   echo -e "$cl_name"DEL"\e[0m"="$cl_value"$DEL"\e[0m"
+  echo -e "$cl_name"NOINFO"\e[0m"="$cl_value"$NOINFO"\e[0m"
+  [ -v F_FNAME ] && echo -e "$cl_name"F_FNAME"\e[0m"="$cl_value"$F_FNAME"\e[0m"
+  [ -v F_DIR ] && echo -e "$cl_name"F_DIR"\e[0m"="$cl_value"$F_DIR"\e[0m"
+  [ -v F_MIN_SIZE ] && echo -e "$cl_name"F_MIN_SIZE"\e[0m"="$cl_value"$F_MIN_SIZE"\e[0m"
+  [ -v F_MAX_SIZE ] && echo -e "$cl_name"F_MAX_SIZE"\e[0m"="$cl_value"$F_MAX_SIZE"\e[0m"
   if [ "$SIMULATE" == "YES" ]; then
     echo -e "$cl_name"SIMULATE"\e[0m"="$cl_value"$SIMULATE"\e[0m"
   fi
@@ -228,18 +240,12 @@ if [ "$DEL" == "YES" ] && [ ! -z "$dst_branch" ]; then
 fi
 
 # replacing git command with a custom function to intercept all git commands
-declare newline="
-"
 declare _git=`which git`
 function git {
   unset -v _all_args
   for i in "$@"
   do
-    if [ "${i// /}" == "$i" ] && [ "${i//$newline/}" == "$i" ]; then
-      _all_args="$_all_args ${i//\'/\"\'\"}"
-    else
-      _all_args="$_all_args '${i//\'/\'\"\'\"\'}'"
-    fi
+    _all_args="$_all_args $(quote_arg "$i")"
   done
   if [ "$SIMULATE" == "YES" ]
   then
@@ -252,14 +258,67 @@ function git {
   fi
 }
 
-function filter {
-  path="$1"
-  # filtering by size
-  objsize=$(git cat-file -s "$commithash:$path")
-  [ $objsize -lt $_SIZE ] && return 1
+function get_filtered_files_for_commit {
+  commithash="$1"
+  git diff-tree -r --name-only --diff-filter=AMT $commithash |
+    tail -n +2 | (_iter=0; while read path; do
+      
+      # filtering by directory
+      directory=$(dirname "$path")
+      if [ "$directory" = "." ]; then directory=""; fi
+      if [ ! -z "$_DIR" ]; then
+        echo "$directory" | sed -r "/$_DIR/I!{q100}" &>/dev/null
+        retVal=$?
+        if [ $retVal -eq 100 ]; then
+          continue
+        fi
+      fi
+      
+      # filtering by name
+      _FNAME=$(basename "$path")
+      if [ ! -z "$_FNAME" ]; then
+        echo "$_FNAME" | sed -r "/$_FNAME/I!{q100}" &>/dev/null
+        retVal=$?
+        #echo retVal=$retVal
+        if [ $retVal -eq 100 ]; then
+          continue
+        fi
+      fi
+      
+      # filtering by size
+      objsize=$(git cat-file -s "$commithash:$path")
+      [ $objsize -lt $_SIZE ] && continue
+      
+      # displaying result
+      if [ -z $_SL ]; then
+        [ $_iter -eq 0 ] && echo -e "\n"$blue"$commithash"$cdef"\t"$dkblue$date"\n"$red"$message"$cdef
+        [ -z "$directory" ] && __dir_name="" || __dir_name=$dkgray$(dirname "$path")$cdef"/"
+        echo $__dir_name$white$(basename "$path")" "$yellow"$objsize"$cdef
+      else
+        [ $_iter -eq 0 ] && _color="$blue" || _color="$dkgray"
+        [ -z "$directory" ] && __dir_name="" || __dir_name=$green$(dirname "$path")$cdef"/"
+        echo $_color"$commithash"$cdef"/"$__dir_name$white$(basename "$path")" "$yellow"$objsize"$cdef
+      fi
+      let "_iter++"
+    done)
+}
 
-  # return ok message (0 means no error ocurred)
-  return 0
+function filter_ls_files {
+  get_filtered_files_for_commit $GIT_COMMIT
+  git ls-files --stage | (
+    while read mode sha stage path
+    do
+      # ref: https://git-scm.com/docs/git-update-index#_using_index_info
+      echo "m:$mode h:$sha s:$stage p:$path"
+      # TODO: use printf or echo to output a line for each file
+      # - to remove a file write:
+      #     0 0000000000000000000000000000000000000000	file_name
+      # - to move a file write:
+      #     $mode $sha $stage	new_file_name
+      # if $1 contains "-r" reverse the logic, remove selected files, and keed unselected files
+      # if $1 contains "-m" move files from src_dir to dst_dir (hint: use sed to replace, if pattern not found, remove file)
+    done
+  )
 }
 
 # General logic:
@@ -270,6 +329,20 @@ function filter {
 # 5) merge temporary directory into the destination branch
 # 6) zip histories of destination branch
 
+# KB: Env vars when doing filter-branch index-filter in Windows:
+# GIT_AUTHOR_DATE=@1551747497 -0300
+# GIT_AUTHOR_EMAIL=masbicudo@gmail.com
+# GIT_AUTHOR_NAME=Miguel Angelo
+# GIT_COMMIT=f99ac249f4effb7d58cc27b1d7be13dddaea5731
+# GIT_COMMITTER_DATE=@1551750290 -0300
+# GIT_COMMITTER_EMAIL=masbicudo@gmail.com
+# GIT_COMMITTER_NAME=Miguel Angelo
+# GIT_DIR=C:/Projects/git-scripts/.git
+# GIT_EXEC_PATH=C:/Program Files/Git/mingw64/libexec/git-core
+# GIT_INDEX_FILE=C:/Projects/git-scripts/.git-rewrite/t/../index
+# GIT_INTERNAL_GETTEXT_SH_SCHEME=fallthrough
+# GIT_WORK_TREE=.
+
 # creating a temporary branch based on the source branch if needed
 if [ "$DEL" == "NO" ]; then
   # when not deleting a branch or a subfolder
@@ -279,7 +352,14 @@ fi
 
 # if not copying, delete source files
 if [ "$COPY" == "NO" ]; then
-  if [ -z "$src_dir" ]; then
+  if [ "$_has_filter" == 1 ]; then
+    # if there are filters, then we need to remove file by file
+    git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+      PATHS=`git ls-files -s | filter_ls_files -r`;
+      echo -n "$PATHS" |
+        GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
+        mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- "$src_branch"
+  elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
     git branch -D $src_branch
     ZIP=
@@ -298,6 +378,8 @@ if [ "$DEL" == "YES" ]; then
   exit 0
 fi
 
+# if has filters, delete unselected files from the temporary branch
+# TODO
 # moving subdirectory to root with --subdirectory-filter
 if [ ! -z "$src_dir" ]; then
   git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- _temp
@@ -308,6 +390,13 @@ fi
 # moving the files to the target directory
 declare __dst_dir="${dst_dir//\'/\'\"\'\"\'}"
 __dst_dir="${__dst_dir//\ /\\\ }"
+# using filter-branch with update-index to move files
+# - filter-branch iterates each commit
+# - update-index changes a file path in a commit
+# - ls-files is used to get a list of files in a format supported by update-index
+#     example output line:
+#       100644 9ff97a979712c881faa31edb5087c0e758ecfc05 0       dir_name/file_name.txt
+# - sed does the replacing of old-path with the new path
 git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
   PATHS=`git ls-files -s | sed "s \t\"* &"'"'""$__dst_dir""'"'"/ "`;
   echo -n "$PATHS" |
