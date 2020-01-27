@@ -328,13 +328,15 @@ function filter_ls_files {
       # see: /kb/path_pattern.sh
       if [[ ! "$path" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
         TEST_SELECTED=0
-      elif [ "$_has_filter" == 1 ]; then
-        ! contains_element "$path" "${__files[@]}"; TEST_SELECTED=$?
+      elif [ "$_has_filter" == "1" ]; then
+        _path="${path/#\"/}"
+        _path="${_path/%\"/}"
+        ! contains_element "$_path" "${__files[@]}"; TEST_SELECTED=$?
       else
         TEST_SELECTED=1
       fi
 
-      if [ $TEST_REMOVE -e $TEST_SELECTED ]; then
+      if [ $TEST_REMOVE -eq $TEST_SELECTED ]; then
         printf "0 0000000000000000000000000000000000000000\t$path\n"
       else
         if [ "$1" == "-m" ]; then
@@ -381,9 +383,10 @@ if [ "$COPY" == "NO" ]; then
   if [ "$_has_filter" == 1 ]; then
     # if there are filters, then we need to remove file by file
     git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-      PATHS=`git ls-files -s | filter_ls_files -r`;
+      PATHS=`filter_ls_files -r`;
       echo -n "$PATHS" |
         GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
+        [ -e "$GIT_INDEX_FILE.new" ] &&
         mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
@@ -404,29 +407,30 @@ if [ "$DEL" == "YES" ]; then
   exit 0
 fi
 
-# # moving subdirectory to root with --subdirectory-filter
-# if [ ! -z "$src_dir" ]; then
-#   git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- _temp
-#   # deleting 'original' branches (git creates these as backups)
-#   git update-ref -d refs/original/refs/heads/_temp
-# fi
 
-# # # # moving the files to the target directory
-# # # declare __dst_dir="${dst_dir//\'/\'\"\'\"\'}"
-# # # __dst_dir="${__dst_dir//\ /\\\ }"
-# using filter-branch with update-index to move files
-# - filter-branch iterates each commit
-# - update-index changes a file path in a commit
-# - ls-files is used to get a list of files in a format supported by update-index
-#     example output line:
-#       100644 9ff97a979712c881faa31edb5087c0e758ecfc05 0       dir_name/file_name.txt
-# - sed does the replacing of old-path with the new path
-# TODO: if dst_dir is empty, the following command does nothing
-git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-  PATHS=`git ls-files -s | filter_ls_files -m`;
-  echo -n "$PATHS" |
-    GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
-    mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- _temp
+if [ -z "$dst_dir" ] && [ "$_has_filter" == "0" ]; then
+  # moving subdirectory to root with --subdirectory-filter
+  if [ ! -z "$src_dir" ]; then
+    git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- _temp
+    # deleting 'original' branches (git creates these as backups)
+    git update-ref -d refs/original/refs/heads/_temp
+  fi
+else
+  # using filter-branch with update-index to move files and delete files
+  # - filter-branch iterates each commit
+  # - update-index changes a file path in a commit, or deletes it from the commit
+  # - filter_ls_files is used to get a list of files in a format supported by update-index
+  #     example output line:
+  #       100644 9ff97a979712c881faa31edb5087c0e758ecfc05 0       dir_name/file_name.txt
+  #     example line to delete a file:
+  #       0 0000000000000000000000000000000000000000       dir_name/file_name.txt
+  git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+    PATHS=`filter_ls_files -m`;
+    echo -n "$PATHS" |
+      GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
+      [ -e "$GIT_INDEX_FILE.new" ] &&
+      mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- _temp
+fi
 # deleting 'original' branches (git creates these as backups)
 git update-ref -d refs/original/refs/heads/_temp
 
