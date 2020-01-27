@@ -9,6 +9,11 @@ SIMULATE=NO
 HELP=NO
 NOINFO=NO
 
+debug () {
+  echo "[92m$@[0m"
+}
+declare -fx debug
+
 function quote_arg {
   if [[ $# -eq 0 ]]; then return 1; fi
   # if argument 1 contains:
@@ -54,7 +59,7 @@ do
   shift
 done
 
-_has_filter=0
+declare -x _has_filter=0
 if [ -v F_FNAME ] || [ -v F_DIR ] || [ -v F_MIN_SIZE ] || [ -v F_MAX_SIZE ]
 then
   _has_filter=1
@@ -130,7 +135,7 @@ function convert_to_bytes {
   return 0
 }
 
-function get_branch_and_dir {
+get_branch_and_dir () {
   # Separates a "branch/path' specifier into a branch and a path.
   # This will print two lines, the 1st is the branch name, the 2nd is the path.
   # If the branch does not exist in the repository, then branch and path
@@ -158,11 +163,17 @@ function get_branch_and_dir {
   echo "$inner_path"
 }
 
+debug "arg_2=$arg_2"
+debug "COPY=$COPY"
+
 if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
+  debug arg_3 and arg_4 are empty
   unset -v src_branch src_dir
-  { IFS= read -r src_branch && IFS= read -r src_dir; } < <(get_branch_and_dir "$arg_1")
+  { IFS= read -r src_branch && IFS= read -r src_dir; } <<< `get_branch_and_dir "$arg_1"`
   unset -v dst_branch dst_dir
-  { IFS= read -r dst_branch && IFS= read -r dst_dir; } < <(get_branch_and_dir "$arg_2")
+  { IFS= read -r dst_branch && IFS= read -r dst_dir; } <<< `get_branch_and_dir "$arg_2"`
+
+  debug dst_branch=$dst_branch
 
   if [ -z "$src_branch" ]
   then
@@ -177,14 +188,18 @@ if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
   fi
 
 elif [ -v "arg_3" ] && [ ! -v "arg_4" ]; then
+  debug arg_3 is empty
   >&2 echo -e "\e[91m""Invalid usage, must specify 2 or 4 ordinal params""\e[0m"
   exit 1
 else
+  debug arg_3 and arg_4 are defined
   src_branch="$(sed 's \\ \/ g' <<< "$arg_1")"
   src_dir="$(sed 's \\ \/ g' <<< "$arg_2")"
   dst_branch="$(sed 's \\ \/ g' <<< "$arg_3")"
   dst_dir="$(sed 's \\ \/ g' <<< "$arg_4")"
 fi
+declare -x src_dir
+declare -x dst_dir
 
 cl_name="\e[38;5;146m"
 cl_value="\e[38;5;186m"
@@ -302,17 +317,22 @@ function get_filtered_files_for_commit {
       let "_iter++"
     done)
 }
+declare -fx get_filtered_files_for_commit
 
 # ref: https://stackoverflow.com/a/10433783/195417
 contains_element () { for e in "${@:2}"; do [[ "$e" = "$1" ]] && return 0; done; return 1; }
 
 function filter_ls_files {
+  # echo "# filter_ls_files" > "/d/__filter_m.txt"
+  # echo "_has_filter=$_has_filter" >> "/d/__filter_m.txt"
   if [ "$_has_filter" == 1 ]; then
     readarray -t __files <<<"$(get_filtered_files_for_commit $GIT_COMMIT)"
   fi
   git ls-files --stage | (
     while read mode sha stage path
     do
+      # echo "" >> "/d/__filter_m.txt"
+
       # ref: https://git-scm.com/docs/git-update-index#_using_index_info
       # TODO: use printf or echo to output a line for each file
       # - to remove a file write:
@@ -326,7 +346,7 @@ function filter_ls_files {
       ! [ "$1" == "-r" ]; TEST_REMOVE=$?
 
       # see: /kb/path_pattern.sh
-      if [[ ! "$path" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
+      if [ ! -z "$src_dir" ] && [[ ! "${path}" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
         TEST_SELECTED=0
       elif [ "$_has_filter" == "1" ]; then
         _path="${path/#\"/}"
@@ -336,18 +356,29 @@ function filter_ls_files {
         TEST_SELECTED=1
       fi
 
-      if [ $TEST_REMOVE -eq $TEST_SELECTED ]; then
-        printf "0 0000000000000000000000000000000000000000\t$path\n"
-      else
+      # echo "$mode $sha $stage $path" >> "/d/__filter_m.txt"
+      # echo "  TEST_REMOVE=$TEST_REMOVE" >> "/d/__filter_m.txt"
+      # echo "  TEST_SELECTED=$TEST_SELECTED" >> "/d/__filter_m.txt"
+
+      if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
         if [ "$1" == "-m" ]; then
           # see: /kb/path_pattern.sh
-          path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
+          if [ "$src_dir" != "$dst_dir" ]; then
+            if [ -z "$src_dir" ]
+            then path=`sed -E 's|^("?)|\1'"$dst_dir"'/|g' <<< "$path"`
+            elif [ -z "$dst_dir" ]
+            then path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|("\|$))|\1\3|g' <<< "$path"`
+            else path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
+            fi
+          fi
         fi
+        # echo "  $mode $sha $stage $path" >> "/d/__filter_m.txt"
         printf "$mode $sha $stage\t$path\n"
       fi
     done
   )
 }
+declare -fx filter_ls_files
 
 # General logic:
 # 1) create a temporary branch based on the source branch
@@ -386,7 +417,6 @@ if [ "$COPY" == "NO" ]; then
       PATHS=`filter_ls_files -r`;
       echo -n "$PATHS" |
         GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
-        [ -e "$GIT_INDEX_FILE.new" ] &&
         mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
@@ -424,12 +454,22 @@ else
   #       100644 9ff97a979712c881faa31edb5087c0e758ecfc05 0       dir_name/file_name.txt
   #     example line to delete a file:
   #       0 0000000000000000000000000000000000000000       dir_name/file_name.txt
-  git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-    PATHS=`filter_ls_files -m`;
+  filter_to_move () {
+    debug ""
+    debug _has_filter=$_has_filter
+    debug "GIT_INDEX_FILE=$GIT_INDEX_FILE"
+    debug "GIT_COMMIT=$GIT_COMMIT"
+    debug "src_dir=$src_dir"
+    debug "dst_dir=$dst_dir"
+    PATHS=`filter_ls_files -m`
+    debug "$PATHS"
     echo -n "$PATHS" |
       GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
       [ -e "$GIT_INDEX_FILE.new" ] &&
-      mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- _temp
+      mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"
+  }
+  declare -fx filter_to_move
+  git filter-branch -f --prune-empty --tag-name-filter cat --index-filter 'filter_to_move' -- _temp
 fi
 # deleting 'original' branches (git creates these as backups)
 git update-ref -d refs/original/refs/heads/_temp

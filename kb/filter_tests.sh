@@ -1,6 +1,7 @@
-src_dir="a/b b"
+src_dir=""
+#src_dir="a/b b"
 dst_dir="d"
-_has_filter=1
+_has_filter=0
 
 function get_filtered_files_for_commit {
   echo "a/b b/my file"
@@ -31,7 +32,7 @@ function filter_ls_files {
       ! [ "$1" == "-r" ]; TEST_REMOVE=$?
 
       # see: /kb/path_pattern.sh
-      if [[ ! "$path" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
+      if [ ! -z "$src_dir" ] && [[ ! "${path}" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
         TEST_SELECTED=0
       elif [ "$_has_filter" == "1" ]; then
         _path="${path/#\"/}"
@@ -41,12 +42,17 @@ function filter_ls_files {
         TEST_SELECTED=1
       fi
 
-      if [ $TEST_REMOVE -eq $TEST_SELECTED ]; then
-        printf "0 0000000000000000000000000000000000000000\t$path\n"
-      else
+      if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
         if [ "$1" == "-m" ]; then
           # see: /kb/path_pattern.sh
-          path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
+          if [ "$src_dir" != "$dst_dir" ]; then
+            if [ -z "$src_dir" ]
+            then path=`sed -E 's|^("?)|\1'"$dst_dir"'/|g' <<< "$path"`
+            elif [ -z "$dst_dir" ]
+            then path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|("\|$))|\1\3|g' <<< "$path"`
+            else path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
+            fi
+          fi
         fi
         printf "$mode $sha $stage\t$path\n"
       fi
