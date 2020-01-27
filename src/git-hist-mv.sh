@@ -9,10 +9,10 @@ SIMULATE=NO
 HELP=NO
 NOINFO=NO
 
-debug () {
-  echo "[92m$@[0m"
-}
+function debug { echo "[92m$@[0m"; }
 declare -fx debug
+function debug_file { touch "/tmp/__debug.git-hist-mv.txt"; echo "$@" >> "/tmp/__debug.git-hist-mv.txt"; }
+declare -fx debug_file
 
 function quote_arg {
   if [[ $# -eq 0 ]]; then return 1; fi
@@ -74,13 +74,16 @@ dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
 if [ "$NOINFO" == "NO" ]; then
   echo -e "$blue""git-hist-mv ""$dkyellow""$ver""$cdef"
   echo $dkgray$0$all_args$cdef
+  debug_file "# git-hist-mv $ver $(date --utc +%FT%T.%3NZ)"
+  debug_file "  $(pwd)"
+  debug_file "  $0$all_args"
 fi
 
 # help screen
 cl_op=$blue
 cl_colons=$dkgray
 if [ "$HELP" == "YES" ]; then
-  echo -e "$white""# Help""$cdef"
+  echo "$white""# Help""$cdef"
   echo "Usage: "$dkgray"$0 "$cl_op"["$dkyellow"source and target"$cl_op"] "$cl_op"["$dkyellow"options"$cl_op"]"$cdef""
   echo $cl_op"["$dkyellow"source and target"$cl_op"]"$cl_colons":"$cdef
   echo "  "Specify the source and target of the operation.
@@ -135,7 +138,25 @@ function convert_to_bytes {
   return 0
 }
 
-get_branch_and_dir () {
+# replacing git command with a custom function to intercept the commands
+function __git {
+  local _all_args=
+  for i in "$@"
+  do
+    _all_args="$_all_args $(quote_arg "$i")"
+  done
+  if [ "$SIMULATE" == "YES" ]
+  then
+    echo $blue"git"$yellow"$_all_args"$cdef
+  else
+    if [ "$NOINFO" == "NO" ]; then
+      echo $blue"git"$yellow"$_all_args"$cdef
+    fi
+    eval git$_all_args
+  fi
+}
+
+function get_branch_and_dir {
   # Separates a "branch/path' specifier into a branch and a path.
   # This will print two lines, the 1st is the branch name, the 2nd is the path.
   # If the branch does not exist in the repository, then branch and path
@@ -254,25 +275,6 @@ if [ "$DEL" == "YES" ] && [ ! -z "$dst_branch" ]; then
   exit 1
 fi
 
-# replacing git command with a custom function to intercept all git commands
-declare _git=`which git`
-function git {
-  unset -v _all_args
-  for i in "$@"
-  do
-    _all_args="$_all_args $(quote_arg "$i")"
-  done
-  if [ "$SIMULATE" == "YES" ]
-  then
-    echo git "$_all_args"
-  else
-    if [ "$NOINFO" == "NO" ]; then
-      echo $blue"git"$yellow"$_all_args"$cdef
-    fi
-    eval "'$_git'"$_all_args
-  fi
-}
-
 function get_filtered_files_for_commit {
   commithash="$1"
   git diff-tree -r --name-only --diff-filter=AMT $commithash |
@@ -320,27 +322,25 @@ function get_filtered_files_for_commit {
 declare -fx get_filtered_files_for_commit
 
 # ref: https://stackoverflow.com/a/10433783/195417
-contains_element () { for e in "${@:2}"; do [[ "$e" = "$1" ]] && return 0; done; return 1; }
+function contains_element { for e in "${@:2}"; do [[ "$e" = "$1" ]] && return 0; done; return 1; }
 
 function filter_ls_files {
-  # echo "# filter_ls_files" > "/d/__filter_m.txt"
-  # echo "_has_filter=$_has_filter" >> "/d/__filter_m.txt"
+  debug_file "  ## filter_ls_files"
+  debug_file "    _has_filter=$_has_filter"
   if [ "$_has_filter" == 1 ]; then
     readarray -t __files <<<"$(get_filtered_files_for_commit $GIT_COMMIT)"
   fi
   git ls-files --stage | (
     while read mode sha stage path
     do
-      # echo "" >> "/d/__filter_m.txt"
-
       # ref: https://git-scm.com/docs/git-update-index#_using_index_info
       # TODO: use printf or echo to output a line for each file
-      # - to remove a file write:
-      #     0 0000000000000000000000000000000000000000	file_name
-      # - to move a file write:
-      #     $mode $sha $stage	new_file_name
-      # if $1 contains "-r" reverse the logic, remove selected files, and keed unselected files
-      # if $1 contains "-m" move files from src_dir to dst_dir (hint: use sed to replace, if pattern not found, remove file)
+      # - to remove a file just skip it, don't write a corresponding line
+      # - to move a file write: $mode $sha $stage	new_file_name
+      #     Note: the char before new_file_name is a TAB character (ALT + NumPad 0 0 9)
+      # if $1 contains:
+      # - "-r": remove selected files, and keed unselected files
+      # - "-m": remove unselected files and move selected files from src_dir to dst_dir
 
       # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
       ! [ "$1" == "-r" ]; TEST_REMOVE=$?
@@ -356,9 +356,9 @@ function filter_ls_files {
         TEST_SELECTED=1
       fi
 
-      # echo "$mode $sha $stage $path" >> "/d/__filter_m.txt"
-      # echo "  TEST_REMOVE=$TEST_REMOVE" >> "/d/__filter_m.txt"
-      # echo "  TEST_SELECTED=$TEST_SELECTED" >> "/d/__filter_m.txt"
+      debug_file "    $mode $sha $stage $path"
+      debug_file "      TEST_REMOVE=$TEST_REMOVE"
+      debug_file "      TEST_SELECTED=$TEST_SELECTED"
 
       if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
         if [ "$1" == "-m" ]; then
@@ -372,7 +372,7 @@ function filter_ls_files {
             fi
           fi
         fi
-        # echo "  $mode $sha $stage $path" >> "/d/__filter_m.txt"
+        debug_file "      $mode $sha $stage $path"
         printf "$mode $sha $stage\t$path\n"
       fi
     done
@@ -406,30 +406,30 @@ declare -fx filter_ls_files
 if [ "$DEL" == "NO" ]; then
   # when not deleting a branch or a subfolder
   # the _temp branch is needed to do manipulations
-  git branch _temp $src_branch
+  __git branch _temp $src_branch
 fi
 
 # if not copying, delete source files
 if [ "$COPY" == "NO" ]; then
   if [ "$_has_filter" == 1 ]; then
     # if there are filters, then we need to remove file by file
-    git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
       PATHS=`filter_ls_files -r`;
       echo -n "$PATHS" |
         GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
         mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
-    git branch -D $src_branch
+    __git branch -D $src_branch
     ZIP=
   else
     # removing source directory from the source branch
-    git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
       git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"'
       ' -- "$src_branch"
   fi
   # deleting 'original' branches (git creates these as backups)
-  git update-ref -d refs/original/refs/heads/"$src_branch"
+  __git update-ref -d refs/original/refs/heads/"$src_branch"
 fi
 
 # if we are only deleting something, then we are done
@@ -441,9 +441,9 @@ fi
 if [ -z "$dst_dir" ] && [ "$_has_filter" == "0" ]; then
   # moving subdirectory to root with --subdirectory-filter
   if [ ! -z "$src_dir" ]; then
-    git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- _temp
+    __git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- _temp
     # deleting 'original' branches (git creates these as backups)
-    git update-ref -d refs/original/refs/heads/_temp
+    __git update-ref -d refs/original/refs/heads/_temp
   fi
 else
   # using filter-branch with update-index to move files and delete files
@@ -454,67 +454,72 @@ else
   #       100644 9ff97a979712c881faa31edb5087c0e758ecfc05 0       dir_name/file_name.txt
   #     example line to delete a file:
   #       0 0000000000000000000000000000000000000000       dir_name/file_name.txt
-  filter_to_move () {
+  function filter_to_move {
     debug ""
     debug _has_filter=$_has_filter
     debug "GIT_INDEX_FILE=$GIT_INDEX_FILE"
     debug "GIT_COMMIT=$GIT_COMMIT"
     debug "src_dir=$src_dir"
     debug "dst_dir=$dst_dir"
-    PATHS=`filter_ls_files -m`
-    debug "$PATHS"
-    echo -n "$PATHS" |
-      GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
-      [ -e "$GIT_INDEX_FILE.new" ] &&
-      mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"
+    local _PATHS=`filter_ls_files -m`
+    debug "$_PATHS"
+    if [ -z "$_PATHS" ]; then return; fi
+    # ref: https://unix.stackexchange.com/questions/358850/what-are-all-the-ways-to-create-a-subshell-in-bash
+    # ref: https://unix.stackexchange.com/questions/153587/environment-variable-assignment-followed-by-command
+    echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info
+    if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
   }
   declare -fx filter_to_move
-  git filter-branch -f --prune-empty --tag-name-filter cat --index-filter 'filter_to_move' -- _temp
+  __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter 'filter_to_move' -- _temp
 fi
 # deleting 'original' branches (git creates these as backups)
-git update-ref -d refs/original/refs/heads/_temp
+__git update-ref -d refs/original/refs/heads/_temp
 
 # getting commit hashes and datetimes
 declare commit1=0 datetime1=0 commit2=0 datetime2=0
 if [ "$SIMULATE" == "NO" ]; then
   #cannot simulate these commands
-  { read commit1 datetime1 ; } < <(
-    git log --reverse --max-parents=0 --format="%H %at" "$dst_branch" | head -1
-  )
-  { read commit2 datetime2 ; } < <(
-    git log --reverse --max-parents=0 --format="%H %at" _temp | head -1
-  )
+  { read commit1 datetime1 ; } <<< "$(git log --reverse --max-parents=0 --format="%H %at" "$dst_branch" | head -1)"
+  { read commit2 datetime2 ; } <<< "$(git log --reverse --max-parents=0 --format="%H %at" _temp | head -1)"
 fi
+debug "commit1=$commit1 datetime1=$datetime1"
+debug "commit2=$commit2 datetime2=$datetime2"
 declare rebase_hash="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 if [ "$datetime1" -gt 0 ] && [ "$datetime2" -gt 0 ]; then
   if [ "$datetime1" -gt "$datetime2" ]; then
-    git log --before $datetime1 --format="%H" -n 1 _temp
     rebase_hash=`git log --before $datetime1 --format="%H" -n 1 _temp`
   else
-    git log --before $datetime2 --format="%H" -n 1 "$dst_branch"
     rebase_hash=`git log --before $datetime2 --format="%H" -n 1 $dst_branch`
   fi
 fi
+debug "rebase_hash=$rebase_hash"
 
 # need to checkout because merge may result in conficts
 # it is a requirement of the merge command
-if git checkout "$dst_branch" 2>/dev/null
+if __git checkout "$dst_branch" 2>/dev/null
 then
+exit 1
   declare _cur_branch=
   _cur_branch=`git branch --show-current`
   echo Current branch is: $_cur_branch
-  git merge --allow-unrelated-histories --no-edit -m "Merge branch '$src_branch' into '$dst_branch'" _temp;
+  __git merge --allow-unrelated-histories --no-edit -s recursive -X no-renames -X theirs --no-commit _temp;
+  __git reset HEAD
+  __git add --ignore-removal .
+  __git checkout -- .
+  # TODO: better commit messages:
+  # - when copying, moving or deleting, it should be clear what was the operation
+  __git commit  -m "Merge branch '$src_branch' into '$dst_branch'"
 else
   #git checkout --orphan "$dst_branch"
   #git rm -r .
   ##git rm -rf .
-  git branch "$dst_branch" _temp
-  git checkout "$dst_branch"
+  __git branch "$dst_branch" _temp
+  __git checkout "$dst_branch"
 fi
 
 # zipping timelines:
 if [ "$ZIP" == "YES" ]; then
-  git -c rebase.autoSquash=false rebase --autostash "$rebase_hash"
+  __git -c rebase.autoSquash=false rebase --autostash "$rebase_hash"
 elif [ "$ZIP" == "NO" ]; then
   echo -e "\e[94mTo zip the timelines you can run a git rebase on"
   echo -e "the commit \e[93m$rebase_hash\e[0m"
@@ -522,4 +527,4 @@ elif [ "$ZIP" == "NO" ]; then
 fi
 
 # deleting _temp branch
-git branch -D _temp
+__git branch -D _temp
