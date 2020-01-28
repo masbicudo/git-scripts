@@ -378,13 +378,13 @@ function filter_ls_files {
       debug_file "      update-index $mode $sha $stage $path"
       printf "$mode $sha $stage\t$path\n"
     else
-      __rm_files+=($path)
+      __rm_files+=("$path")
       debug_file "      __rm_files+=($path)"
     fi
   done <<< "$(git ls-files --stage)"
 
   debug_file "    ${__rm_files[@]}"
-  git rm --cached --ignore-unmatch -r -f -- ${__rm_files[@]} > /dev/null 2>&1
+  debug_file `git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}"` > /dev/null 2>&1
 }
 declare -fx filter_ls_files
 

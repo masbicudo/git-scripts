@@ -21,17 +21,18 @@ if [ ! -z "$_PREPARE" ]; then
 
     git checkout --orphan "b1'"
     git rm -rf .
+    touch "a 0.txt"
     mkdir "d 1"
-    touch "d 1/a.txt"
+    touch "d 1/a 1.txt"
     git add -A
-    git commit -a -m "added 'd 1/a.txt'"
+    git commit -a -m "added 'a 0.txt', 'd 1/a 1.txt'"
 
   sleep 1
 
-    mkdir other
-    touch other/a2.txt
+    mkdir "d 2"
+    touch "d 2/a 2.txt"
     git add -A
-    git commit -a -m "added 'other/a2.txt'"
+    git commit -a -m "added 'd 2/a 2.txt'"
 
   sleep 1
 else
@@ -42,7 +43,7 @@ fi
 if [ ! -z "$_EXEC" ]; then
   echo -e "\e[34m""renaming subdirectory with spaces in history - zip parent timelines with rebase""\e[0m"
     git branch b1s "b1'"
-    "$git_hist_mv" "b1s/d 1" "b1s/d 2" --zip
+    "$git_hist_mv" "b1s/d 2" "b1s/d 3" --zip
 fi
 
 # cleanup
@@ -53,9 +54,10 @@ fi
 
 _RET_CODE=0
 if [ ! -z "$_ASSERT" ]; then
-  check -e  "other/a2.txt" || _RET_CODE=1
-  check -ne "d 1/a.txt" || _RET_CODE=1
-  check -e  "d 2/a.txt" || _RET_CODE=1
+  check -e  "a 0.txt" || _RET_CODE=1
+  check -e  "d 1/a 1.txt" || _RET_CODE=1
+  check -ne "d 2/a 2.txt" || _RET_CODE=1
+  check -e  "d 3/a 2.txt" || _RET_CODE=1
 fi
 
 popd
