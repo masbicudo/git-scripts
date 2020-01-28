@@ -1,7 +1,7 @@
 src_dir=""
-#src_dir="a/b b"
+src_dir="a/b b"
 dst_dir="d"
-_has_filter=0
+_has_filter=1
 
 function get_filtered_files_for_commit {
   echo "a/b b/my file"
@@ -9,55 +9,71 @@ function get_filtered_files_for_commit {
   echo "b/other"
 }
 
+function debug_file { echo "[92m$@[0m"; }
+
 # ref: https://stackoverflow.com/a/10433783/195417
 contains_element () { for e in "${@:2}"; do [[ "$e" = "$1" ]] && return 0; done; return 1; }
 
 function filter_ls_files {
+  debug_file "  ## filter_ls_files"
+  debug_file "    _has_filter=$_has_filter"
   if [ "$_has_filter" == 1 ]; then
-    readarray -t __files <<<"$(get_filtered_files_for_commit $GIT_COMMIT)"
+    readarray -t __files <<< "$(get_filtered_files_for_commit $GIT_COMMIT)"
   fi
-  git ls-files --stage | (
-    while read mode sha stage path
-    do
-      # ref: https://git-scm.com/docs/git-update-index#_using_index_info
-      # TODO: use printf or echo to output a line for each file
-      # - to remove a file write:
-      #     0 0000000000000000000000000000000000000000	file_name
-      # - to move a file write:
-      #     $mode $sha $stage	new_file_name
-      # if $1 contains "-r" reverse the logic, remove selected files, and keed unselected files
-      # if $1 contains "-m" move files from src_dir to dst_dir (hint: use sed to replace, if pattern not found, remove file)
+  # ref: https://stackoverflow.com/questions/1951506/add-a-new-element-to-an-array-without-specifying-the-index-in-bash
+  __rm_files=()
 
-      # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
-      ! [ "$1" == "-r" ]; TEST_REMOVE=$?
+  while read mode sha stage path
+  do
+    # ref: https://git-scm.com/docs/git-update-index#_using_index_info
+    # TODO: use printf or echo to output a line for each file
+    # - to remove a file just skip it, don't write a corresponding line
+    # - to move a file write: $mode $sha $stage	new_file_name
+    #     Note: the char before new_file_name is a TAB character (ALT + NumPad 0 0 9)
+    # if $1 contains:
+    # - "-r": remove selected files, and keed unselected files
+    # - "-m": remove unselected files and move selected files from src_dir to dst_dir
 
-      # see: /kb/path_pattern.sh
-      if [ ! -z "$src_dir" ] && [[ ! "${path}" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
-        TEST_SELECTED=0
-      elif [ "$_has_filter" == "1" ]; then
-        _path="${path/#\"/}"
-        _path="${_path/%\"/}"
-        ! contains_element "$_path" "${__files[@]}"; TEST_SELECTED=$?
-      else
-        TEST_SELECTED=1
-      fi
+    # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
+    ! [ "$1" == "-r" ]; TEST_REMOVE=$?
 
-      if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
-        if [ "$1" == "-m" ]; then
-          # see: /kb/path_pattern.sh
-          if [ "$src_dir" != "$dst_dir" ]; then
-            if [ -z "$src_dir" ]
-            then path=`sed -E 's|^("?)|\1'"$dst_dir"'/|g' <<< "$path"`
-            elif [ -z "$dst_dir" ]
-            then path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|("\|$))|\1\3|g' <<< "$path"`
-            else path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
-            fi
+    # see: /kb/path_pattern.sh
+    if [ ! -z "$src_dir" ] && [[ ! "${path}" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
+      TEST_SELECTED=0
+    elif [ "$_has_filter" == "1" ]; then
+      _path="${path/#\"/}"
+      _path="${_path/%\"/}"
+      ! contains_element "$_path" "${__files[@]}"; TEST_SELECTED=$?
+    else
+      TEST_SELECTED=1
+    fi
+
+    debug_file "    $mode $sha $stage $path"
+    debug_file "      TEST_REMOVE=$TEST_REMOVE"
+    debug_file "      TEST_SELECTED=$TEST_SELECTED"
+
+    if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
+      if [ "$1" == "-m" ]; then
+        # see: /kb/path_pattern.sh
+        if [ "$src_dir" != "$dst_dir" ]; then
+          if [ -z "$src_dir" ]
+          then path=`sed -E 's|^("?)|\1'"$dst_dir"'/|g' <<< "$path"`
+          elif [ -z "$dst_dir" ]
+          then path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|("\|$))|\1\3|g' <<< "$path"`
+          else path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
           fi
         fi
-        printf "$mode $sha $stage\t$path\n"
       fi
-    done
-  )
+      debug_file "      update-index $mode $sha $stage $path"
+      printf "$mode $sha $stage\t$path\n"
+    else
+      __rm_files+=("$path")
+      debug_file "      __rm_files+=($path)"
+    fi
+  done <<< "$(git ls-files --stage)"
+
+  debug_file "    ${__rm_files[@]}"
+  debug_file `git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}"` > /dev/null 2>&1
 }
 
 git () {
@@ -71,6 +87,8 @@ git () {
     fi
 }
 
+echo "filter_ls_files -r"
 filter_ls_files -r
 echo ""
+echo "filter_ls_files -m"
 filter_ls_files -m

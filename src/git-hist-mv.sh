@@ -29,6 +29,11 @@ function quote_arg {
   return 0
 }
 
+# TODO: optimization - try to replace sed commands with variable replacements
+# - convert: sed -e "s ^\"  ;s \"$  "
+# - to this: _path="${1/#\"/}"; _path="${_path/%\"/}"
+# (NOTE: test to see if it is really faster! on Windows, on Linux and on Mac if possible)
+
 # reading arguments
 all_args=
 if [ "$*" == "" ]; then
@@ -39,18 +44,18 @@ argc=0
 while [[ $# -gt 0 ]]
 do
   i="$1"
-  all_args="$all_args $(quote_arg "$i")"
+  all_args="$all_args $(quote_arg "$1")"
   case $i in
-    --file-name|-fn)      F_FNAME=$2    ;shift;;
-    --dir)                F_DIR=$2      ;shift;;
-    --min-size)           F_MIN_SIZE=$2 ;shift;;
-    --max-size)           F_MAX_SIZE=$2 ;shift;;
-    --delete|--del|-d)    DEL=YES             ;;
-    --zip|-z)             ZIP=YES             ;;
-    --copy|-c)            COPY=YES            ;;
-    --simulate|--sim|-s)  SIMULATE=YES        ;;
-    --help|-h)            HELP=YES            ;;
-    --noinfo)             NOINFO=YES          ;;
+    --file-name|-fn)      F_FNAME=$2    ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --dir)                F_DIR=$2      ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --min-size)           F_MIN_SIZE=$2 ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --max-size)           F_MAX_SIZE=$2 ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --delete|--del|-d)    DEL=YES       ;;
+    --zip|-z)             ZIP=YES       ;;
+    --copy|-c)            COPY=YES      ;;
+    --simulate|--sim|-s)  SIMULATE=YES  ;;
+    --help|-h)            HELP=YES      ;;
+    --noinfo)             NOINFO=YES    ;;
     *)
     ((argc=argc+1))
     eval "arg_$argc='${i//\'/\'\"\'\"\'}'"
@@ -58,6 +63,8 @@ do
   esac
   shift
 done
+
+declare -x F_FNAME F_DIR F_MIN_SIZE F_MAX_SIZE
 
 declare -x _has_filter=0
 if [ -v F_FNAME ] || [ -v F_DIR ] || [ -v F_MIN_SIZE ] || [ -v F_MAX_SIZE ]
@@ -112,6 +119,10 @@ if [ "$HELP" == "YES" ]; then
   echo "  "$yellow"--copy "$cl_op"or "$yellow"-c"$cl_colons":"                               $white"copy instead of move"
   echo "  "$yellow"--delete "$cl_op"or "$yellow"--del "$cl_op"or "$yellow"-d"$cl_colons":"   $white"delete instead of move"
   echo "  "$yellow"--simulate "$cl_op"or "$yellow"--sim "$cl_op"or "$yellow"-s"$cl_colons":" $white"show all git commands instead of executing them"
+  echo "  "$yellow"--file-name "$cl_op"or "$yellow"--fn"$cl_colons":" $white"regex to filter filename"
+  echo "  "$yellow"--dir"$cl_colons":" $white"regex to filter dirname"
+  echo "  "$yellow"--min-size"$cl_colons":" $white"filter by minimum file size"
+  echo "  "$yellow"--max-size"$cl_colons":" $white"filter by maximum file size"
   exit 0
 fi
 
@@ -137,6 +148,20 @@ function convert_to_bytes {
   echo "$__sz"
   return 0
 }
+
+# normalizing filters
+if [ -v F_FNAME ]; then
+  if [ "${F_FNAME:0:1}" = "/" ]; then
+    F_FNAME=$(sed -r "s ^/(.*)/$ \1 " <<< "$F_FNAME")
+  else
+    F_FNAME=$(sed -r "s \*\..*$ \0$ ;s \. \\\\. ;s \* .* ;s \? . " <<< "$F_FNAME")
+  fi
+fi
+
+if [ -v F_DIR ]; then F_DIR=$(sed -r 's\\/|/(^|$|\\/)g' <<< "$_DIR"); fi
+
+if [ -v F_MIN_SIZE ]; then F_MIN_SIZE="$(convert_to_bytes "$F_MIN_SIZE")"; fi
+if [ -v F_MAX_SIZE ]; then F_MAX_SIZE="$(convert_to_bytes "$F_MAX_SIZE")"; fi
 
 # replacing git command with a custom function to intercept the commands
 function __git {
@@ -275,70 +300,66 @@ if [ "$DEL" == "YES" ] && [ ! -z "$dst_branch" ]; then
   exit 1
 fi
 
-function get_filtered_files_for_commit {
-  commithash="$1"
-  git diff-tree -r --name-only --diff-filter=AMT $commithash |
-    tail -n +2 | (_iter=0; while read path; do
-      
-      # filtering by directory
-      directory=$(dirname "$path")
-      if [ "$directory" = "." ]; then directory=""; fi
-      if [ ! -z "$_DIR" ]; then
-        echo "$directory" | sed -r "/$_DIR/I!{q100}" &>/dev/null
-        retVal=$?
-        if [ $retVal -eq 100 ]; then
-          continue
-        fi
-      fi
-      
-      # filtering by name
-      _FNAME=$(basename "$path")
-      if [ ! -z "$_FNAME" ]; then
-        echo "$_FNAME" | sed -r "/$_FNAME/I!{q100}" &>/dev/null
-        retVal=$?
-        #echo retVal=$retVal
-        if [ $retVal -eq 100 ]; then
-          continue
-        fi
-      fi
-      
-      # filtering by size
-      objsize=$(git cat-file -s "$commithash:$path")
-      [ $objsize -lt $_SIZE ] && continue
-      
-      # displaying result
-      if [ -z $_SL ]; then
-        [ $_iter -eq 0 ] && echo -e "\n"$blue"$commithash"$cdef"\t"$dkblue$date"\n"$red"$message"$cdef
-        [ -z "$directory" ] && __dir_name="" || __dir_name=$dkgray$(dirname "$path")$cdef"/"
-        echo $__dir_name$white$(basename "$path")" "$yellow"$objsize"$cdef
-      else
-        [ $_iter -eq 0 ] && _color="$blue" || _color="$dkgray"
-        [ -z "$directory" ] && __dir_name="" || __dir_name=$green$(dirname "$path")$cdef"/"
-        echo $_color"$commithash"$cdef"/"$__dir_name$white$(basename "$path")" "$yellow"$objsize"$cdef
-      fi
-      let "_iter++"
-    done)
+function is_file_selected {
+  debug_file "      ## is_file_selected"
+  debug_file "        F_DIR=$F_DIR F_FNAME=$F_FNAME F_MIN_SIZE=$F_MIN_SIZE F_MAX_SIZE=$F_MAX_SIZE"
+  local _path="${1/#\"/}"
+  _path="${_path/%\"/}"
+
+  # filtering by directory
+  if [ -v F_DIR ]; then
+    local directory=$(dirname "$_path")
+    if [ "$directory" = "." ]; then directory=""; fi
+    debug_file "        directory=$directory"
+    echo "$directory" | sed -r "/$F_DIR/I!{q100}" &>/dev/null
+    retVal=$?
+    if [ $retVal -eq 100 ]; then
+      return 1
+    fi
+  fi
+  
+  # filtering by name
+  if [ -v F_FNAME ]; then
+    local fname=$(basename "$_path")
+    debug_file "        fname=$fname"
+    echo "$fname" | sed -r "/$F_FNAME/I!{q100}" &>/dev/null
+    local retVal=$?
+    #echo retVal=$retVal
+    if [ $retVal -eq 100 ]; then
+      return 1
+    fi
+  fi
+  
+  # filtering by size
+  if [ -v F_MIN_SIZE ] || [ -v F_MAX_SIZE ]; then
+    local objsize=$(git cat-file -s "$GIT_COMMIT:$_path")
+    debug_file "        objsize=$objsize"
+    if [ -v F_MIN_SIZE ] && [ $objsize -lt $F_MIN_SIZE ]; then return 1; fi
+    if [ -v F_MAX_SIZE ] && [ $objsize -gt $F_MAX_SIZE ]; then return 1; fi
+  fi
+  
+  # displaying result
+  return 0
 }
-declare -fx get_filtered_files_for_commit
+declare -fx is_file_selected
 
 # ref: https://stackoverflow.com/a/10433783/195417
 function contains_element { for e in "${@:2}"; do [[ "$e" = "$1" ]] && return 0; done; return 1; }
 declare -fx contains_element
 
 function filter_ls_files {
-  debug_file "  ## filter_ls_files"
+  debug_file "  ## filter_ls_files $1"
   debug_file "    _has_filter=$_has_filter"
-  if [ "$_has_filter" == 1 ]; then
-    readarray -t __files <<<"$(get_filtered_files_for_commit $GIT_COMMIT)"
-  fi
+  debug_file "    GIT_COMMIT=$GIT_COMMIT"
   # ref: https://stackoverflow.com/questions/1951506/add-a-new-element-to-an-array-without-specifying-the-index-in-bash
   __rm_files=()
 
   while read mode sha stage path
   do
+    debug_file "    $mode $sha $stage $path"
     # ref: https://git-scm.com/docs/git-update-index#_using_index_info
-    # TODO: use printf or echo to output a line for each file
-    # - to remove a file just skip it, don't write a corresponding line
+    # use printf or echo to output a line for each file
+    # - to remove a file just skip it, don't write a corresponding line, then git rm that file
     # - to move a file write: $mode $sha $stage	new_file_name
     #     Note: the char before new_file_name is a TAB character (ALT + NumPad 0 0 9)
     # if $1 contains:
@@ -352,14 +373,15 @@ function filter_ls_files {
     if [ ! -z "$src_dir" ] && [[ ! "${path}" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
       TEST_SELECTED=0
     elif [ "$_has_filter" == "1" ]; then
-      _path="${path/#\"/}"
-      _path="${_path/%\"/}"
-      ! contains_element "$_path" "${__files[@]}"; TEST_SELECTED=$?
+      # remember: 0=OK non-zero=FAIL
+      # when negating: 0=FAIL 1=OK
+      # TODO: optimization - use an associative array to remember is a file is selected or not by using the $sha hash
+      ! is_file_selected "$path"
+      TEST_SELECTED=$?
     else
       TEST_SELECTED=1
     fi
 
-    debug_file "    $mode $sha $stage $path"
     debug_file "      TEST_REMOVE=$TEST_REMOVE"
     debug_file "      TEST_SELECTED=$TEST_SELECTED"
 

@@ -33,6 +33,7 @@ do
   shift
 done
 
+# normalizing filters
 if [[ "$_SIZE" =~ ^[0-9]+[KMGTEkmgte][Bb]$ ]]; then
   LETTER=$(echo $_SIZE | sed -r 's ^[0-9]+([KMGTE])B$ \1 gI')
   _SIZE=$(echo $_SIZE | sed -r 's ^([0-9]+)[KMGTE]B$ \1 gI')
@@ -71,9 +72,9 @@ function get_filtered_files_for_commit {
       fi
       
       # filtering by name
-      _FNAME=$(basename "$path")
+      fname=$(basename "$path")
       if [ ! -z "$_FNAME" ]; then
-        echo "$_FNAME" | sed -r "/$_FNAME/I!{q100}" &>/dev/null
+        echo "$fname" | sed -r "/$_FNAME/I!{q100}" &>/dev/null
         retVal=$?
         #echo retVal=$retVal
         if [ $retVal -eq 100 ]; then
