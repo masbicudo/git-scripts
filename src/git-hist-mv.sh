@@ -323,6 +323,7 @@ declare -fx get_filtered_files_for_commit
 
 # ref: https://stackoverflow.com/a/10433783/195417
 function contains_element { for e in "${@:2}"; do [[ "$e" = "$1" ]] && return 0; done; return 1; }
+declare -fx contains_element
 
 function filter_ls_files {
   debug_file "  ## filter_ls_files"
@@ -330,53 +331,60 @@ function filter_ls_files {
   if [ "$_has_filter" == 1 ]; then
     readarray -t __files <<<"$(get_filtered_files_for_commit $GIT_COMMIT)"
   fi
-  git ls-files --stage | (
-    while read mode sha stage path
-    do
-      # ref: https://git-scm.com/docs/git-update-index#_using_index_info
-      # TODO: use printf or echo to output a line for each file
-      # - to remove a file just skip it, don't write a corresponding line
-      # - to move a file write: $mode $sha $stage	new_file_name
-      #     Note: the char before new_file_name is a TAB character (ALT + NumPad 0 0 9)
-      # if $1 contains:
-      # - "-r": remove selected files, and keed unselected files
-      # - "-m": remove unselected files and move selected files from src_dir to dst_dir
+  # ref: https://stackoverflow.com/questions/1951506/add-a-new-element-to-an-array-without-specifying-the-index-in-bash
+  __rm_files=()
 
-      # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
-      ! [ "$1" == "-r" ]; TEST_REMOVE=$?
+  while read mode sha stage path
+  do
+    # ref: https://git-scm.com/docs/git-update-index#_using_index_info
+    # TODO: use printf or echo to output a line for each file
+    # - to remove a file just skip it, don't write a corresponding line
+    # - to move a file write: $mode $sha $stage	new_file_name
+    #     Note: the char before new_file_name is a TAB character (ALT + NumPad 0 0 9)
+    # if $1 contains:
+    # - "-r": remove selected files, and keed unselected files
+    # - "-m": remove unselected files and move selected files from src_dir to dst_dir
 
-      # see: /kb/path_pattern.sh
-      if [ ! -z "$src_dir" ] && [[ ! "${path}" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
-        TEST_SELECTED=0
-      elif [ "$_has_filter" == "1" ]; then
-        _path="${path/#\"/}"
-        _path="${_path/%\"/}"
-        ! contains_element "$_path" "${__files[@]}"; TEST_SELECTED=$?
-      else
-        TEST_SELECTED=1
-      fi
+    # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
+    ! [ "$1" == "-r" ]; TEST_REMOVE=$?
 
-      debug_file "    $mode $sha $stage $path"
-      debug_file "      TEST_REMOVE=$TEST_REMOVE"
-      debug_file "      TEST_SELECTED=$TEST_SELECTED"
+    # see: /kb/path_pattern.sh
+    if [ ! -z "$src_dir" ] && [[ ! "${path}" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
+      TEST_SELECTED=0
+    elif [ "$_has_filter" == "1" ]; then
+      _path="${path/#\"/}"
+      _path="${_path/%\"/}"
+      ! contains_element "$_path" "${__files[@]}"; TEST_SELECTED=$?
+    else
+      TEST_SELECTED=1
+    fi
 
-      if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
-        if [ "$1" == "-m" ]; then
-          # see: /kb/path_pattern.sh
-          if [ "$src_dir" != "$dst_dir" ]; then
-            if [ -z "$src_dir" ]
-            then path=`sed -E 's|^("?)|\1'"$dst_dir"'/|g' <<< "$path"`
-            elif [ -z "$dst_dir" ]
-            then path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|("\|$))|\1\3|g' <<< "$path"`
-            else path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
-            fi
+    debug_file "    $mode $sha $stage $path"
+    debug_file "      TEST_REMOVE=$TEST_REMOVE"
+    debug_file "      TEST_SELECTED=$TEST_SELECTED"
+
+    if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
+      if [ "$1" == "-m" ]; then
+        # see: /kb/path_pattern.sh
+        if [ "$src_dir" != "$dst_dir" ]; then
+          if [ -z "$src_dir" ]
+          then path=`sed -E 's|^("?)|\1'"$dst_dir"'/|g' <<< "$path"`
+          elif [ -z "$dst_dir" ]
+          then path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|("\|$))|\1\3|g' <<< "$path"`
+          else path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
           fi
         fi
-        debug_file "      $mode $sha $stage $path"
-        printf "$mode $sha $stage\t$path\n"
       fi
-    done
-  )
+      debug_file "      update-index $mode $sha $stage $path"
+      printf "$mode $sha $stage\t$path\n"
+    else
+      __rm_files+=($path)
+      debug_file "      __rm_files+=($path)"
+    fi
+  done <<< "$(git ls-files --stage)"
+
+  debug_file "    ${__rm_files[@]}"
+  git rm --cached --ignore-unmatch -r -f -- ${__rm_files[@]} > /dev/null 2>&1
 }
 declare -fx filter_ls_files
 
@@ -413,11 +421,7 @@ fi
 if [ "$COPY" == "NO" ]; then
   if [ "$_has_filter" == 1 ]; then
     # if there are filters, then we need to remove file by file
-    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-      PATHS=`filter_ls_files -r`;
-      echo -n "$PATHS" |
-        GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
-        mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"' -- "$src_branch"
+    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter 'filter_ls_files -r' -- "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
     __git branch -D $src_branch
@@ -437,7 +441,6 @@ if [ "$DEL" == "YES" ]; then
   exit 0
 fi
 
-
 if [ -z "$dst_dir" ] && [ "$_has_filter" == "0" ]; then
   # moving subdirectory to root with --subdirectory-filter
   if [ ! -z "$src_dir" ]; then
@@ -446,14 +449,13 @@ if [ -z "$dst_dir" ] && [ "$_has_filter" == "0" ]; then
     __git update-ref -d refs/original/refs/heads/_temp
   fi
 else
-  # using filter-branch with update-index to move files and delete files
-  # - filter-branch iterates each commit
-  # - update-index changes a file path in a commit, or deletes it from the commit
+  # using filter-branch/index-filter, update-index/index-info and rm/cached to move and delete files
+  # - filter-branch/index-filter iterates each commit without checking out each commit
+  # - update-index/index-info changes multiple file pathes in a commit
   # - filter_ls_files is used to get a list of files in a format supported by update-index
+  #     and it also deletes files that are not returned to the update-index command
   #     example output line:
   #       100644 9ff97a979712c881faa31edb5087c0e758ecfc05 0       dir_name/file_name.txt
-  #     example line to delete a file:
-  #       0 0000000000000000000000000000000000000000       dir_name/file_name.txt
   function filter_to_move {
     debug ""
     debug _has_filter=$_has_filter
@@ -466,7 +468,7 @@ else
     if [ -z "$_PATHS" ]; then return; fi
     # ref: https://unix.stackexchange.com/questions/358850/what-are-all-the-ways-to-create-a-subshell-in-bash
     # ref: https://unix.stackexchange.com/questions/153587/environment-variable-assignment-followed-by-command
-    echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info
+    echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --remove --index-info
     if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
   }
   declare -fx filter_to_move
@@ -498,17 +500,16 @@ debug "rebase_hash=$rebase_hash"
 # it is a requirement of the merge command
 if __git checkout "$dst_branch" 2>/dev/null
 then
-exit 1
   declare _cur_branch=
   _cur_branch=`git branch --show-current`
   echo Current branch is: $_cur_branch
   __git merge --allow-unrelated-histories --no-edit -s recursive -X no-renames -X theirs --no-commit _temp;
-  __git reset HEAD
-  __git add --ignore-removal .
-  __git checkout -- .
+  # __git reset HEAD
+  # __git add --ignore-removal .
+  # __git checkout -- .
   # TODO: better commit messages:
   # - when copying, moving or deleting, it should be clear what was the operation
-  __git commit  -m "Merge branch '$src_branch' into '$dst_branch'"
+  __git commit -m "Merge branch '$src_branch' into '$dst_branch'"
 else
   #git checkout --orphan "$dst_branch"
   #git rm -r .
