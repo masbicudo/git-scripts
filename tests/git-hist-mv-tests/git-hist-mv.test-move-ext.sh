@@ -43,8 +43,9 @@ fi
 if [ ! -z "$_EXEC" ]; then
   echo -e "\e[34m""moving files based on extension""\e[0m"
     git branch b1s "b1"
-    "$git_hist_mv" "b1s" "b2" -fn '\.jpg$|\.png$'
+    "$git_hist_mv" "b1s" "b2" -fn e'.jpg .png'
 fi
+git checkout "b2"
 
 # cleanup
 if [ -z "$_KEEP_BRANCHES" ]; then
@@ -54,10 +55,9 @@ fi
 
 _RET_CODE=0
 if [ ! -z "$_ASSERT" ]; then
-  check -e  "a 0.txt" || _RET_CODE=1
-  check -e  "d 1/a 1.txt" || _RET_CODE=1
-  check -ne "d 2/a 2.txt" || _RET_CODE=1
-  check -e  "d 3/a 2.txt" || _RET_CODE=1
+  check -ne "a0.txt" || _RET_CODE=1
+  check -e  "d 1/a 1.png" || _RET_CODE=1
+  check -e  "d 2/a 2.jpg" || _RET_CODE=1
 fi
 
 popd

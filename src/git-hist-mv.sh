@@ -46,10 +46,11 @@ do
   i="$1"
   all_args="$all_args $(quote_arg "$1")"
   case $i in
-    --file-name|-fn)      F_FNAME=$2    ;all_args="$all_args $(quote_arg "$2")";shift;;
-    --dir)                F_DIR=$2      ;all_args="$all_args $(quote_arg "$2")";shift;;
-    --min-size)           F_MIN_SIZE=$2 ;all_args="$all_args $(quote_arg "$2")";shift;;
-    --max-size)           F_MAX_SIZE=$2 ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --path|-p)            F_PATH="$2"     ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --file-name|-fn)      F_FNAME="$2"    ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --dir)                F_DIR="$2"      ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --min-size)           F_MIN_SIZE="$2" ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --max-size)           F_MAX_SIZE="$2" ;all_args="$all_args $(quote_arg "$2")";shift;;
     --delete|--del|-d)    DEL=YES       ;;
     --zip|-z)             ZIP=YES       ;;
     --copy|-c)            COPY=YES      ;;
@@ -119,10 +120,32 @@ if [ "$HELP" == "YES" ]; then
   echo "  "$yellow"--copy "$cl_op"or "$yellow"-c"$cl_colons":"                               $white"copy instead of move"
   echo "  "$yellow"--delete "$cl_op"or "$yellow"--del "$cl_op"or "$yellow"-d"$cl_colons":"   $white"delete instead of move"
   echo "  "$yellow"--simulate "$cl_op"or "$yellow"--sim "$cl_op"or "$yellow"-s"$cl_colons":" $white"show all git commands instead of executing them"
-  echo "  "$yellow"--file-name "$cl_op"or "$yellow"--fn"$cl_colons":" $white"regex to filter filename"
-  echo "  "$yellow"--dir"$cl_colons":" $white"regex to filter dirname"
+  echo "  "$yellow"--file-name "$cl_op"or "$yellow"--fn"$cl_colons":" $white"filter by filename"
+  echo "  "$yellow"--dir"$cl_colons":" $white"filter by dirname"
+  echo "  "$yellow"--path "$cl_op"or "$yellow"--p"$cl_colons":" $white"filter by path (directory and file name)"
+  echo "    "$dkgreen"Note"$cl_colons": "$cdef
+  echo "      "When filtering by a string, you can preceed the string with some options:
+  echo "      "- '"r"' to indicate a regex filter 'r"^(some|file)"'
+  echo "      "- '"b"' to indicate a list of patterns matching the start of the string
+  echo "        "e.g. "'b dir1/ dir2/'"
+  echo "      "- '"e"' to indicate a list of patterns matching the end of the string
+  echo "        "e.g. "'e .png .jpg'"
+  echo "      "- '"c"' to indicate a list of patterns matching anywhere in the string
+  echo "        "e.g. "'c foo'"
+  echo "      "- '"x"' to indicate a list of patterns matching the whole string
+  echo "        "e.g. "'x=exact file name.png'"
+  echo "      "Negate a string pattern using "'!'" before or after the option letter:
+  echo "        "e.g. "'x!=exact file name.png'"
+  echo "        "e.g. "'!e=.png'"
+  echo "      "Use "'='" to indicate a single pattern, insetead of many separated by spaces.
+  echo "      "Use of "'='" or "'!='" alone imply option "'x'".
   echo "  "$yellow"--min-size"$cl_colons":" $white"filter by minimum file size"
   echo "  "$yellow"--max-size"$cl_colons":" $white"filter by maximum file size"
+  echo "    "$dkgreen"Note"$cl_colons": "$cdef
+  echo "      "When filtering by file size, you can append units to the number:
+  echo "        "e.g. "100MB"
+  echo "        "e.g. "1k"
+  echo "      "It is case insensitive, and ignores the final "'B'" or "'b'" if present.
   exit 0
 fi
 
@@ -149,21 +172,79 @@ function convert_to_bytes {
   return 0
 }
 
-# normalizing filters
-if [ -v F_FNAME ]; then
-  if [ "${F_FNAME:0:1}" = "/" ]; then
-    F_FNAME=$(sed -r "s ^/(.*)/$ \1 " <<< "$F_FNAME")
-  else
-    F_FNAME=$(sed -r "s \*\..*$ \0$ ;s \. \\\\. ;s \* .* ;s \? . " <<< "$F_FNAME")
+# see: kb/norm_fname.sh
+function proc_f_fname {
+  shopt -s extglob
+  local _fname="$1"
+  if [ ! -z "$_fname" ]; then
+    local _not="0" _opt="" _single="0" _icase="0"
+    if [ "${_fname:0:1}" = "i" ]; then
+      _icase="1"
+      _fname="${_fname:1}"
+    fi
+    if [ "${_fname:0:1}" = "!" ]; then
+      _not="1"
+      _fname="${_fname:1}"
+    fi
+    if [[ "ebcr" =~ "${_fname:0:1}" ]]; then
+      _opt="${_fname:0:1}"
+      _fname="${_fname:1}"
+    fi
+    if [ -z "$_not" ] && [ "${_fname:0:1}" = "!" ]; then
+      _not="1"
+      _fname="${_fname:1}"
+    fi
+    if [ "$_opt" != "r" ]; then
+      if [ "${_fname:0:1}" = "=" ]; then
+        _single="1"
+        _fname="${_fname:1}"
+      fi
+    fi
+    if [ ! -z "$_single" ] && [ -z "$_opt" ]; then
+      _opt="x"
+    fi
+    if [[ "ebcx" =~ "$_opt" ]]; then
+      _fname="${_fname//\\/\/}"
+      _fname="${_fname//\$/\\\$}"
+      _fname="${_fname//\./\\\.}"
+      _fname="${_fname//\(/\\\(}"
+      _fname="${_fname//\)/\\\)}"
+      _fname="${_fname//\[/\\\[}"
+      _fname="${_fname//\]/\\\]}"
+      _fname="${_fname//\^/\\\^}"
+      _fname="${_fname//\//[\\/]}"
+      _fname="${_fname//\*\*/\\Q}"
+      _fname="${_fname//\*/\([^\\/]\*\)}"
+      _fname="${_fname//\\Q/\(\.\*\)}"
+      _fname="${_fname/#*([[:blank:]])/\(}"
+      _fname="${_fname/%*([[:blank:]])/\)}"
+      if [ -z "$_single" ]; then
+        _fname="${_fname//+([[:blank:]])/\)\|\(}"
+      fi
+      if [ "$_opt" = "b" ]; then
+        _fname="^($_fname)"
+      elif [ "$_opt" = "e" ]; then
+        _fname="($_fname)$"
+      elif [ "$_opt" = "x" ]; then
+        _fname="^($_fname)$"
+      fi
+    elif [ "$_opt" != "r" ]; then
+      return 1
+    fi
   fi
-fi
+  echo "$_not" "$_icase" "$_fname"
+  return 0
+}
 
-if [ -v F_DIR ]; then F_DIR=$(sed -r 's\\/|/(^|$|\\/)g' <<< "$_DIR"); fi
-
+# normalizing filters and their options
+# TODO: support multiple filters of the same type, doing an 'AND' operation between them
+if [ -v F_FNAME ]; then read F_FNAME_NOT F_FNAME_CI F_FNAME <<< "$(proc_f_fname "$F_FNAME")"; fi
+if [ -v F_DIR ]; then read F_DIR_NOT F_DIR_CI F_DIR <<< "$(proc_f_fname "$F_DIR")"; fi
+if [ -v F_PATH ]; then read F_PATH_NOT F_PATH_CI F_PATH <<< "$(proc_f_fname "$F_PATH")"; fi
 if [ -v F_MIN_SIZE ]; then F_MIN_SIZE="$(convert_to_bytes "$F_MIN_SIZE")"; fi
 if [ -v F_MAX_SIZE ]; then F_MAX_SIZE="$(convert_to_bytes "$F_MAX_SIZE")"; fi
 
-# replacing git command with a custom function to intercept the commands
+# git command alternative that intercept the commands and displays them before executing
 function __git {
   local _all_args=
   for i in "$@"
@@ -306,28 +387,39 @@ function is_file_selected {
   local _path="${1/#\"/}"
   _path="${_path/%\"/}"
 
+  # filtering by path
+  if [ -v F_PATH ]; then
+    local _fpath="$_path"
+    local _ci=""
+    if [ "$F_PATH_CI" == "1" ]; then _ci="I"; fi
+    if [ "$_fpath" = "." ]; then _fpath=""; fi
+    debug_file "        _fpath=$_fpath"
+    echo "$_fpath" | sed -r "/$F_PATH/$_ci!{q100}" &>/dev/null
+    [ $? -eq 100 ]
+    if [ "$?" = "$F_PATH_NOT" ]; then return 1; fi
+  fi
+  
   # filtering by directory
   if [ -v F_DIR ]; then
     local directory=$(dirname "$_path")
+    local _ci=""
+    if [ "$F_DIR_CI" == "1" ]; then _ci="I"; fi
     if [ "$directory" = "." ]; then directory=""; fi
     debug_file "        directory=$directory"
-    echo "$directory" | sed -r "/$F_DIR/I!{q100}" &>/dev/null
-    retVal=$?
-    if [ $retVal -eq 100 ]; then
-      return 1
-    fi
+    echo "$directory" | sed -r "/$F_DIR/$_ci!{q100}" &>/dev/null
+    [ $? -eq 100 ]
+    if [ "$?" = "$F_DIR_NOT" ]; then return 1; fi
   fi
   
   # filtering by name
   if [ -v F_FNAME ]; then
     local fname=$(basename "$_path")
+    local _ci=""
+    if [ "$F_FNAME_CI" == "1" ]; then _ci="I"; fi
     debug_file "        fname=$fname"
-    echo "$fname" | sed -r "/$F_FNAME/I!{q100}" &>/dev/null
-    local retVal=$?
-    #echo retVal=$retVal
-    if [ $retVal -eq 100 ]; then
-      return 1
-    fi
+    echo "$fname" | sed -r "/$F_FNAME/$_ci!{q100}" &>/dev/null
+    [ $? -eq 100 ]
+    if [ "$?" = "$F_FNAME_NOT" ]; then return 1; fi
   fi
   
   # filtering by size

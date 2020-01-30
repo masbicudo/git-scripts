@@ -1,3 +1,4 @@
+#!/bin/bash
 # F_DIR="(^a)|(^b)"
 # F_FNAME="file"
 F_MIN_SIZE=1000KB
@@ -27,11 +28,20 @@ function convert_to_bytes {
 
 # normalizing filters
 if [ -v F_FNAME ]; then
-  if [ "${F_FNAME:0:1}" = "/" ]; then
-    F_FNAME=$(sed -r "s ^/(.*)/$ \1 " <<< "$F_FNAME")
-  else
-    F_FNAME=$(sed -r "s \*\..*$ \0$ ;s \. \\\\. ;s \* .* ;s \? . " <<< "$F_FNAME")
+  if [ "${F_FNAME:0:1}" = "r" ]; then
+    F_FNAME="${F_FNAME:1}"
+  elif [ "${F_FNAME:0:1}" = "#" ] || [ "${F_FNAME:0:1}" = "%" ]; then
+    F_FNAME="${F_FNAME:1}"
+    F_FNAME="${F_FNAME/# */(}"
+    F_FNAME="${F_FNAME/% */)}"
+    F_FNAME="${F_FNAME// */)|(}"
+    F_FNAME="${F_FNAME//\./\\.}"
   fi
+  # elif [ "${F_FNAME:0:1}" = "/" ]; then
+  #   F_FNAME=$(sed -r "s ^/(.*)/$ \1 " <<< "$F_FNAME")
+  # else
+  #   F_FNAME=$(sed -r "s \*\..*$ \0$ ;s \. \\\\. ;s \* .* ;s \? . " <<< "$F_FNAME")
+  # fi
 fi
 
 if [ -v F_DIR ]; then F_DIR=$(sed -r 's\\/|/(^|$|\\/)g' <<< "$_DIR"); fi

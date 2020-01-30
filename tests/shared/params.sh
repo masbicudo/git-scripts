@@ -8,6 +8,7 @@ do
     -a|--assert)         _ASSERT=TRUE       ;;
     -kf|--keep-files)    _KEEP_FILES=TRUE   ;;
     -kb|--keep-branches) _KEEP_BRANCHES=TRUE;;
+    -kbf|-kfb|-k)        _KEEP_BRANCHES=TRUE; _KEEP_FILES=TRUE;;
     *)                                      ;;
   esac
   shift
