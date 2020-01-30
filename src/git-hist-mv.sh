@@ -65,8 +65,6 @@ do
   shift
 done
 
-declare -x F_FNAME F_DIR F_MIN_SIZE F_MAX_SIZE
-
 declare -x _has_filter=0
 if [ -v F_FNAME ] || [ -v F_DIR ] || [ -v F_MIN_SIZE ] || [ -v F_MAX_SIZE ]
 then
@@ -190,7 +188,7 @@ function proc_f_fname {
       _opt="${_fname:0:1}"
       _fname="${_fname:1}"
     fi
-    if [ -z "$_not" ] && [ "${_fname:0:1}" = "!" ]; then
+    if [ "$_not" == "0" ] && [ "${_fname:0:1}" = "!" ]; then
       _not="1"
       _fname="${_fname:1}"
     fi
@@ -200,7 +198,7 @@ function proc_f_fname {
         _fname="${_fname:1}"
       fi
     fi
-    if [ ! -z "$_single" ] && [ -z "$_opt" ]; then
+    if [ "$_single" == "1" ] && [ -z "$_opt" ]; then
       _opt="x"
     fi
     if [[ "ebcx" =~ "$_opt" ]]; then
@@ -218,7 +216,7 @@ function proc_f_fname {
       _fname="${_fname//\\Q/\(\.\*\)}"
       _fname="${_fname/#*([[:blank:]])/\(}"
       _fname="${_fname/%*([[:blank:]])/\)}"
-      if [ -z "$_single" ]; then
+      if [ "$_single" == "0" ]; then
         _fname="${_fname//+([[:blank:]])/\)\|\(}"
       fi
       if [ "$_opt" = "b" ]; then
@@ -238,11 +236,16 @@ function proc_f_fname {
 
 # normalizing filters and their options
 # TODO: support multiple filters of the same type, doing an 'AND' operation between them
-if [ -v F_FNAME ]; then read F_FNAME_NOT F_FNAME_CI F_FNAME <<< "$(proc_f_fname "$F_FNAME")"; fi
-if [ -v F_DIR ]; then read F_DIR_NOT F_DIR_CI F_DIR <<< "$(proc_f_fname "$F_DIR")"; fi
-if [ -v F_PATH ]; then read F_PATH_NOT F_PATH_CI F_PATH <<< "$(proc_f_fname "$F_PATH")"; fi
+if [ -v F_FNAME ]; then read -r F_FNAME_NOT F_FNAME_CI F_FNAME <<< "$(proc_f_fname "$F_FNAME")"; fi
+if [ -v F_DIR ]; then read -r F_DIR_NOT F_DIR_CI F_DIR <<< "$(proc_f_fname "$F_DIR")"; fi
+if [ -v F_PATH ]; then read -r F_PATH_NOT F_PATH_CI F_PATH <<< "$(proc_f_fname "$F_PATH")"; fi
 if [ -v F_MIN_SIZE ]; then F_MIN_SIZE="$(convert_to_bytes "$F_MIN_SIZE")"; fi
 if [ -v F_MAX_SIZE ]; then F_MAX_SIZE="$(convert_to_bytes "$F_MAX_SIZE")"; fi
+
+declare -x F_FNAME_NOT F_FNAME_CI F_FNAME
+declare -x F_DIR_NOT F_DIR_CI F_DIR
+declare -x F_PATH_NOT F_PATH_CI F_PATH
+declare -x F_MIN_SIZE F_MAX_SIZE
 
 # git command alternative that intercept the commands and displays them before executing
 function __git {
@@ -339,8 +342,21 @@ if [ "$NOINFO" == "NO" ]; then
   echo -e "$cl_name"COPY"\e[0m"="$cl_value"$COPY"\e[0m"
   echo -e "$cl_name"DEL"\e[0m"="$cl_value"$DEL"\e[0m"
   echo -e "$cl_name"NOINFO"\e[0m"="$cl_value"$NOINFO"\e[0m"
-  [ -v F_FNAME ] && echo -e "$cl_name"F_FNAME"\e[0m"="$cl_value"$F_FNAME"\e[0m"
-  [ -v F_DIR ] && echo -e "$cl_name"F_DIR"\e[0m"="$cl_value"$F_DIR"\e[0m"
+  if [ -v F_PATH ]; then
+    echo -e "$cl_name"F_PATH"\e[0m"="$cl_value""$F_PATH\e[0m"
+    echo -e "$cl_name"F_PATH_NOT"\e[0m"="$cl_value""$F_PATH_NOT\e[0m"
+    echo -e "$cl_name"F_PATH_CI"\e[0m"="$cl_value""$F_PATH_CI\e[0m"
+  fi
+  if [ -v F_DIR ]; then
+    echo -e "$cl_name"F_DIR"\e[0m"="$cl_value""$F_DIR\e[0m"
+    echo -e "$cl_name"F_DIR_NOT"\e[0m"="$cl_value""$F_DIR_NOT\e[0m"
+    echo -e "$cl_name"F_DIR_CI"\e[0m"="$cl_value""$F_DIR_CI\e[0m"
+  fi
+  if [ -v F_FNAME ]; then
+    echo -e "$cl_name"F_FNAME"\e[0m"="$cl_value""$F_FNAME\e[0m"
+    echo -e "$cl_name"F_FNAME_NOT"\e[0m"="$cl_value""$F_FNAME_NOT\e[0m"
+    echo -e "$cl_name"F_FNAME_CI"\e[0m"="$cl_value""$F_FNAME_CI\e[0m"
+  fi
   [ -v F_MIN_SIZE ] && echo -e "$cl_name"F_MIN_SIZE"\e[0m"="$cl_value"$F_MIN_SIZE"\e[0m"
   [ -v F_MAX_SIZE ] && echo -e "$cl_name"F_MAX_SIZE"\e[0m"="$cl_value"$F_MAX_SIZE"\e[0m"
   if [ "$SIMULATE" == "YES" ]; then
@@ -463,7 +479,7 @@ function filter_ls_files {
 
     # see: /kb/path_pattern.sh
     if [ ! -z "$src_dir" ] && [[ ! "${path}" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
-      TEST_SELECTED=0
+      TEST_SELECTED="0"
     elif [ "$_has_filter" == "1" ]; then
       # remember: 0=OK non-zero=FAIL
       # when negating: 0=FAIL 1=OK
@@ -471,7 +487,7 @@ function filter_ls_files {
       ! is_file_selected "$path"
       TEST_SELECTED=$?
     else
-      TEST_SELECTED=1
+      TEST_SELECTED="1"
     fi
 
     debug_file "      TEST_REMOVE=$TEST_REMOVE"
@@ -497,8 +513,10 @@ function filter_ls_files {
     fi
   done <<< "$(git ls-files --stage)"
 
-  debug_file "    ${__rm_files[@]}"
-  debug_file `git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}"` > /dev/null 2>&1
+  if [ ${#__rm_files[@]} -gt 0 ]; then
+    debug_file "    ${__rm_files[@]}"
+    debug_file `git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}"` > /dev/null 2>&1
+  fi
 }
 declare -fx filter_ls_files
 

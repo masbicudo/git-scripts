@@ -25,7 +25,7 @@ function proc_f_fname {
       _opt="${_fname:0:1}"
       _fname="${_fname:1}"
     fi
-    if [ -z "$_not" ] && [ "${_fname:0:1}" = "!" ]; then
+    if [ "$_not" == "0" ] && [ "${_fname:0:1}" = "!" ]; then
       _not="1"
       _fname="${_fname:1}"
     fi
@@ -35,7 +35,7 @@ function proc_f_fname {
         _fname="${_fname:1}"
       fi
     fi
-    if [ ! -z "$_single" ] && [ -z "$_opt" ]; then
+    if [ "$_single" == "1" ] && [ -z "$_opt" ]; then
       _opt="x"
     fi
     if [[ "ebcx" =~ "$_opt" ]]; then
@@ -53,7 +53,7 @@ function proc_f_fname {
       _fname="${_fname//\\Q/\(\.\*\)}"
       _fname="${_fname/#*([[:blank:]])/\(}"
       _fname="${_fname/%*([[:blank:]])/\)}"
-      if [ -z "$_single" ]; then
+      if [ "$_single" == "0" ]; then
         _fname="${_fname//+([[:blank:]])/\)\|\(}"
       fi
       if [ "$_opt" = "b" ]; then
@@ -72,7 +72,7 @@ function proc_f_fname {
 }
 _icase=xpto
 # proc_f_fname "$1"
-read N_FNAME I_FNAME F_FNAME <<< "$(proc_f_fname "$1")"
+read -r N_FNAME I_FNAME F_FNAME <<< "$(proc_f_fname "$1")"
 echo "F_FNAME='${F_FNAME/\'/\'\"\'\"\'}'"
 echo "N_FNAME='$N_FNAME'"
 echo "I_FNAME='$I_FNAME'"
