@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=v0.3.4
+ver=v0.3.5
 
 # argument variables
 ZIP=NO
@@ -515,7 +515,7 @@ function filter_ls_files {
 
   if [ ${#__rm_files[@]} -gt 0 ]; then
     debug_file "    ${__rm_files[@]}"
-    debug_file `git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}"` > /dev/null 2>&1
+    git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}" > /dev/null 2>&1
   fi
 }
 declare -fx filter_ls_files
