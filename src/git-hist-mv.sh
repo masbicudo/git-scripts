@@ -9,10 +9,12 @@ SIMULATE=NO
 HELP=NO
 NOINFO=NO
 
+#BEGIN_DEBUG
 function debug { echo "[92m$@[0m"; }
 declare -fx debug
 function debug_file { touch "/tmp/__debug.git-hist-mv.txt"; echo "$@" >> "/tmp/__debug.git-hist-mv.txt"; }
 declare -fx debug_file
+#END_DEBUG
 
 function quote_arg {
   if [[ $# -eq 0 ]]; then return 1; fi
@@ -86,6 +88,7 @@ if [ "$NOINFO" == "NO" ]; then
 fi
 
 # help screen
+#BEGIN_AS_IS
 cl_op=$blue
 cl_colons=$dkgray
 if [ "$HELP" == "YES" ]; then
@@ -146,7 +149,7 @@ if [ "$HELP" == "YES" ]; then
   echo "      "It is case insensitive, and ignores the final "'B'" or "'b'" if present.
   exit 0
 fi
-
+#END_AS_IS
 function convert_to_bytes {
   # Converts a number of data units into bytes:
   # - Supports K, M, G, T, E
