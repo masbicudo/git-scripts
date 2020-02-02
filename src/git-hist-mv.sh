@@ -102,9 +102,9 @@ if [ "$HELP" == "YES" ]; then
   echo "      "$dkgray"$0"$yellow" 'some/branch/filename' 'other-branch/dir/fname.txt'"
   echo "    "$dkgreen"Note"$cl_colons": "$cdef
   echo "      Branch names containing '/' can be recognized if they actually exist."
-  echo "      The joined format only supports branches that exist."
-  echo "      In the previous example, 'some/branch' and 'other-branch' must both"
-  echo "      exist in the local repo."
+  echo "      The joined format tries to match branches that exist first."
+  echo "      The source branch must exist, but the destination does not."
+  echo "      In this case, the first part of the path is the new-branch name."
   echo "  "$cl_op"- "$dkyellow"Separated format"$cl_colons": "$white"branch first then directory/filename"$cdef
   echo "    "$red"Example"$cl_colons": "
   echo "      "$dkgray"$0"$yellow" 'some/branch' 'filename' 'new-branch' 'dir/fname.txt'"
@@ -287,7 +287,7 @@ function get_branch_and_dir {
       fi
     done
   )
-  echo $branch
+  echo "$branch"
 
   inner_path=
   if [ ! -z "$branch" ]; then
@@ -295,9 +295,6 @@ function get_branch_and_dir {
   fi
   echo "$inner_path"
 }
-
-debug "arg_2=$arg_2"
-debug "COPY=$COPY"
 
 if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
   debug arg_3 and arg_4 are empty
@@ -318,6 +315,8 @@ if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
   then
     dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
     dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
+  else
+    dst_branch_exists=TRUE
   fi
 
 elif [ -v "arg_3" ] && [ ! -v "arg_4" ]; then
@@ -377,6 +376,11 @@ fi
 
 if [ -z "$src_branch" ]; then
   >&2 echo -e "\e[91m""Invalid usage, must specify source branch""\e[0m"
+  exit 1
+fi
+
+if [ ! -z dst_branch ] && [ "${dst_branch//[[:blank:]]/}" != "$dst_branch" ]; then
+  >&2 echo -e "\e[91m""Invalid branch name: ""$dst_branch""\e[0m"
   exit 1
 fi
 
@@ -545,11 +549,13 @@ declare -fx filter_ls_files
 # GIT_INTERNAL_GETTEXT_SH_SCHEME=fallthrough
 # GIT_WORK_TREE=.
 
+NEW_UUID="$(cat /dev/urandom | tr -dc '0-9A-F' | fold -w 32 | head -n 1)"
+tmp_branch="_temp_$NEW_UUID"
 # creating a temporary branch based on the source branch if needed
 if [ "$DEL" == "NO" ]; then
   # when not deleting a branch or a subfolder
   # the _temp branch is needed to do manipulations
-  __git branch _temp $src_branch
+  __git branch $tmp_branch $src_branch
 fi
 
 # if not copying, delete source files
@@ -579,9 +585,9 @@ fi
 if [ -z "$dst_dir" ] && [ "$_has_filter" == "0" ]; then
   # moving subdirectory to root with --subdirectory-filter
   if [ ! -z "$src_dir" ]; then
-    __git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- _temp
+    __git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- "$tmp_branch"
     # deleting 'original' branches (git creates these as backups)
-    __git update-ref -d refs/original/refs/heads/_temp
+    __git update-ref -d refs/original/refs/heads/"$tmp_branch"
   fi
 else
   # using filter-branch/index-filter, update-index/index-info and rm/cached to move and delete files
@@ -607,38 +613,42 @@ else
     if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
   }
   declare -fx filter_to_move
-  __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter 'filter_to_move' -- _temp
+  __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter 'filter_to_move' -- "$tmp_branch"
 fi
 # deleting 'original' branches (git creates these as backups)
-__git update-ref -d refs/original/refs/heads/_temp
+__git update-ref -d refs/original/refs/heads/"$tmp_branch"
 
 # getting commit hashes and datetimes
-declare commit1=0 datetime1=0 commit2=0 datetime2=0
-if [ "$SIMULATE" == "NO" ]; then
-  #cannot simulate these commands
-  { read commit1 datetime1 ; } <<< "$(git log --reverse --max-parents=0 --format="%H %at" "$dst_branch" | head -1)"
-  { read commit2 datetime2 ; } <<< "$(git log --reverse --max-parents=0 --format="%H %at" _temp | head -1)"
-fi
-debug "commit1=$commit1 datetime1=$datetime1"
-debug "commit2=$commit2 datetime2=$datetime2"
-declare rebase_hash="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-if [ "$datetime1" -gt 0 ] && [ "$datetime2" -gt 0 ]; then
-  if [ "$datetime1" -gt "$datetime2" ]; then
-    rebase_hash=`git log --before $datetime1 --format="%H" -n 1 _temp`
-  else
-    rebase_hash=`git log --before $datetime2 --format="%H" -n 1 $dst_branch`
+unset -v rebase_hash
+if [ -v dst_branch_exists ]; then
+  declare commit1=0 datetime1=0 commit2=0 datetime2=0
+  if [ "$SIMULATE" == "NO" ]; then
+    #cannot simulate these commands
+    { read commit1 datetime1 ; } <<< "$(git log --reverse --max-parents=0 --format="%H %at" "$dst_branch" | head -1)"
+    { read commit2 datetime2 ; } <<< "$(git log --reverse --max-parents=0 --format="%H %at" "$tmp_branch" | head -1)"
   fi
+  debug "commit1=$commit1 datetime1=$datetime1"
+  debug "commit2=$commit2 datetime2=$datetime2"
+  rebase_hash="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+  if [ "$datetime1" -gt 0 ] && [ "$datetime2" -gt 0 ]; then
+    if [ "$datetime1" -gt "$datetime2" ]; then
+      rebase_hash=`git log --before $datetime1 --format="%H" -n 1 "$tmp_branch"`
+    else
+      rebase_hash=`git log --before $datetime2 --format="%H" -n 1 "$dst_branch"`
+    fi
+  fi
+  debug "rebase_hash=$rebase_hash"
 fi
-debug "rebase_hash=$rebase_hash"
 
 # need to checkout because merge may result in conficts
 # it is a requirement of the merge command
-if __git checkout "$dst_branch" 2>/dev/null
+if [ -v dst_branch_exists ]
 then
+  __git checkout "$dst_branch"
   declare _cur_branch=
   _cur_branch=`git branch --show-current`
   echo Current branch is: $_cur_branch
-  __git merge --allow-unrelated-histories --no-edit -s recursive -X no-renames -X theirs --no-commit _temp;
+  __git merge --allow-unrelated-histories --no-edit -s recursive -X no-renames -X theirs --no-commit "$tmp_branch";
   # __git reset HEAD
   # __git add --ignore-removal .
   # __git checkout -- .
@@ -649,18 +659,23 @@ else
   #git checkout --orphan "$dst_branch"
   #git rm -r .
   ##git rm -rf .
-  __git branch "$dst_branch" _temp
+  if ! __git branch "$dst_branch" "$tmp_branch"
+  then
+    exit 1
+  fi
   __git checkout "$dst_branch"
 fi
 
 # zipping timelines:
-if [ "$ZIP" == "YES" ]; then
-  __git -c rebase.autoSquash=false rebase --autostash "$rebase_hash"
-elif [ "$ZIP" == "NO" ]; then
-  echo -e "\e[94mTo zip the timelines you can run a git rebase on"
-  echo -e "the commit \e[93m$rebase_hash\e[0m"
-  echo -e "e.g. \e[97mgit -c rebase.autoSquash=false rebase --autostash "$rebase_hash"\e[0m"
+if [ -v rebase_hash ]; then
+  if [ "$ZIP" == "YES" ]; then
+    __git -c rebase.autoSquash=false rebase --autostash "$rebase_hash"
+  elif [ "$ZIP" == "NO" ]; then
+    echo -e "\e[94mTo zip the timelines you can run a git rebase on"
+    echo -e "the commit \e[93m$rebase_hash\e[0m"
+    echo -e "e.g. \e[97mgit -c rebase.autoSquash=false rebase --autostash "$rebase_hash"\e[0m"
+  fi
 fi
 
 # deleting _temp branch
-__git branch -D _temp
+__git branch -D "$tmp_branch"
