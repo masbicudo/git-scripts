@@ -333,36 +333,35 @@ fi
 declare -x src_dir
 declare -x dst_dir
 
-cl_name="\e[38;5;146m"
-cl_value="\e[38;5;186m"
+print_var () { local cl_name="\e[38;5;146m" cl_value="\e[38;5;186m"; [ -v $1 ] && echo -e "$cl_name"$1"\e[0m"="$cl_value"${!1}"\e[0m"; }
 if [ "$NOINFO" == "NO" ]; then
-  echo -e "$cl_name"src_branch"\e[0m"="$cl_value"$src_branch"\e[0m"
-  echo -e "$cl_name"src_dir"\e[0m"="$cl_value"$src_dir"\e[0m"
-  echo -e "$cl_name"dst_branch"\e[0m"="$cl_value"$dst_branch"\e[0m"
-  echo -e "$cl_name"dst_dir"\e[0m"="$cl_value"$dst_dir"\e[0m"
-  echo -e "$cl_name"ZIP"\e[0m"="$cl_value"$ZIP"\e[0m"
-  echo -e "$cl_name"COPY"\e[0m"="$cl_value"$COPY"\e[0m"
-  echo -e "$cl_name"DEL"\e[0m"="$cl_value"$DEL"\e[0m"
-  echo -e "$cl_name"NOINFO"\e[0m"="$cl_value"$NOINFO"\e[0m"
+  print_var src_branch
+  print_var src_dir
+  print_var dst_branch
+  print_var dst_dir
+  print_var ZIP
+  print_var COPY
+  print_var DEL
+  print_var NOINFO
   if [ -v F_PATH ]; then
-    echo -e "$cl_name"F_PATH"\e[0m"="$cl_value""$F_PATH\e[0m"
-    echo -e "$cl_name"F_PATH_NOT"\e[0m"="$cl_value""$F_PATH_NOT\e[0m"
-    echo -e "$cl_name"F_PATH_CI"\e[0m"="$cl_value""$F_PATH_CI\e[0m"
+    print_var F_PATH
+    print_var F_PATH_NOT
+    print_var F_PATH_CI
   fi
   if [ -v F_DIR ]; then
-    echo -e "$cl_name"F_DIR"\e[0m"="$cl_value""$F_DIR\e[0m"
-    echo -e "$cl_name"F_DIR_NOT"\e[0m"="$cl_value""$F_DIR_NOT\e[0m"
-    echo -e "$cl_name"F_DIR_CI"\e[0m"="$cl_value""$F_DIR_CI\e[0m"
+    print_var F_DIR
+    print_var F_DIR_NOT
+    print_var F_DIR_CI
   fi
   if [ -v F_FNAME ]; then
-    echo -e "$cl_name"F_FNAME"\e[0m"="$cl_value""$F_FNAME\e[0m"
-    echo -e "$cl_name"F_FNAME_NOT"\e[0m"="$cl_value""$F_FNAME_NOT\e[0m"
-    echo -e "$cl_name"F_FNAME_CI"\e[0m"="$cl_value""$F_FNAME_CI\e[0m"
+    print_var F_FNAME
+    print_var F_FNAME_NOT
+    print_var F_FNAME_CI
   fi
-  [ -v F_MIN_SIZE ] && echo -e "$cl_name"F_MIN_SIZE"\e[0m"="$cl_value"$F_MIN_SIZE"\e[0m"
-  [ -v F_MAX_SIZE ] && echo -e "$cl_name"F_MAX_SIZE"\e[0m"="$cl_value"$F_MAX_SIZE"\e[0m"
+  print_var F_MIN_SIZE
+  print_var F_MAX_SIZE
   if [ "$SIMULATE" == "YES" ]; then
-    echo -e "$cl_name"SIMULATE"\e[0m"="$cl_value"$SIMULATE"\e[0m"
+    print_var SIMULATE
   fi
 fi
 
