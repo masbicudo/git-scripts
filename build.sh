@@ -5,20 +5,22 @@ dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
 
 # reading arguments
 argc=0
+unset -v has_args
 while [[ $# -gt 0 ]]
 do
   i="$1"
+  has_args=1
   case $i in
     --install|-i)         INSTALL_PATH="$2" ;shift;;
     --path|-p)            BUILD_PATH="$2"   ;shift;;
     --save|-s)
       SAVE_SETTINGS="1"
-      if [ ! -z "$2" ] && ! [[ "$2" =~ ^-- ]]; then SAVE_PATH="$2"; shift;
+      if [ ! -z "$2" ] && ! [[ "$2" =~ ^- ]]; then SAVE_PATH="$2"; shift;
       else SAVE_PATH="settings.txt"; fi
       ;;
     --load|-l)
       LOAD_SETTINGS="1"
-      if [ ! -z "$2" ] && ! [[ "$2" =~ ^-- ]]; then LOAD_PATH="$2"; shift;
+      if [ ! -z "$2" ] && ! [[ "$2" =~ ^- ]]; then LOAD_PATH="$2"; shift;
       else LOAD_PATH="settings.txt"; fi
       ;;
     *)
@@ -34,13 +36,14 @@ if [ -v SAVE_SETTINGS ] && [ -v LOAD_SETTINGS ]; then
   exit 1
 fi
 
-if [ "$*" == "" ] && [ -f "settings.txt" ]; then
+if [ ! -v has_args ] && [ -f "settings.txt" ]; then
   LOAD_PATH="settings.txt"
 fi
 
 if [ ! -z "$SAVE_PATH" ]; then
-  echo "BUILD_PATH='$BUILD_PATH'" > "$SAVE_PATH"
-  echo "INSTALL_PATH='$INSTALL_PATH'" >> "$SAVE_PATH"
+  truncate -s 0 "$SAVE_PATH"
+  if [ -v BUILD_PATH ]; then echo "BUILD_PATH=$BUILD_PATH" >> "$SAVE_PATH" ; fi
+  if [ -v INSTALL_PATH ]; then echo "INSTALL_PATH=$INSTALL_PATH" >> "$SAVE_PATH" ; fi
 fi
 if [ ! -z "$LOAD_PATH" ]; then
   # ref: https://www.cyberciti.biz/faq/unix-howto-read-line-by-line-from-file/
