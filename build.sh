@@ -66,7 +66,9 @@ print_var LOAD_PATH
 print_var BUILD_PATH
 print_var INSTALL_PATH
 
+rm -rf "$BUILD_PATH"
 [ ! -d "$BUILD_PATH" ] && mkdir "$BUILD_PATH"
+shopt -s nullglob
 for f in ./src/**.sh ./src/**/*.sh
 do
   _file="$BUILD_PATH/${f//\.\/src\//}"
