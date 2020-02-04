@@ -25,4 +25,4 @@ function stripout_commit {
   git add . --ignore-removal
 }
 declare -fx stripout_commit
-git filter-branch -f --index-filter 'while read line; do echo -e "\t$line"; done <<< "$(stripout_commit)"'
+git filter-branch -f --index-filter 'stripout_commit | sed "s/^/\t/"'
