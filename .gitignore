@@ -1,3 +1,6 @@
 test-repo-*/
 *.bak
 /build/
+sample.txt
+/kb/_.sh
+/settings.txt

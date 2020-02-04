@@ -56,10 +56,10 @@ if [ -v LOAD_SETTINGS ]; then
 fi
 
 print_var () { local cl_name="\e[38;5;146m" cl_value="\e[38;5;186m"; [ -v $1 ] && echo -e "$cl_name"$1"\e[0m"="$cl_value"${!1}"\e[0m"; }
-print_var BUILD_PATH
-print_var INSTALL_PATH
 print_var SAVE_PATH
 print_var LOAD_PATH
+print_var BUILD_PATH
+print_var INSTALL_PATH
 
 [ ! -d "$BUILD_PATH" ] && mkdir "$BUILD_PATH"
 for f in ./src/*.sh
