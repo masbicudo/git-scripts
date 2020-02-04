@@ -3,6 +3,8 @@ dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
 cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
 dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
 
+# TODO: concatenate contents of included files using "source" or "."
+
 # reading arguments
 argc=0
 unset -v has_args
@@ -65,8 +67,12 @@ print_var BUILD_PATH
 print_var INSTALL_PATH
 
 [ ! -d "$BUILD_PATH" ] && mkdir "$BUILD_PATH"
-for f in ./src/*.sh
+for f in ./src/**.sh ./src/**/*.sh
 do
+  _file="$BUILD_PATH/${f//\.\/src\//}"
+  _dir=`dirname "$_file"`
+  [ ! -d "$_dir" ] && mkdir "$_dir"
+  echo "$_file"
   # ref: http://www.nongnu.org/bibledit/sed_rules_reference.html#addressesandrangesoftext
   sed -r '
   /#BEGIN_DEBUG/,/#END_DEBUG/d;
@@ -77,10 +83,11 @@ do
     s/^ *//
   };
   2,${/^ *#(BEGIN|END)_AS_IS\b.*$/d
-  }' "$f" > "$BUILD_PATH/$(basename "$f")"
+  }' "$f" > "$_file"
 done
 
 if [ ! -z "$INSTALL_PATH" ]; then
+  rm -rf "$INSTALL_PATH"
   [ ! -d "$INSTALL_PATH" ] && mkdir "$INSTALL_PATH"
   for f in ./src/*.sh
   do
