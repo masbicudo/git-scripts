@@ -457,10 +457,6 @@ function is_file_selected {
 }
 declare -fx is_file_selected
 
-# ref: https://stackoverflow.com/a/10433783/195417
-function contains_element { for e in "${@:2}"; do [[ "$e" = "$1" ]] && return 0; done; return 1; }
-declare -fx contains_element
-
 function filter_ls_files {
   debug_file "  ## filter_ls_files $1"
   debug_file "    _has_filter=$_has_filter"

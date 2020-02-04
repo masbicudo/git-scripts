@@ -1,4 +1,5 @@
 #!/bin/bash
+# ref: https://stackoverflow.com/a/10433783/195417
 contains_element () { for e in "${@:2}"; do [[ "$e" = "$1" ]] && return 0; done; return 1; }
 
 function my_command {
