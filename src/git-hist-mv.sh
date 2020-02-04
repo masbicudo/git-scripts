@@ -24,7 +24,7 @@ function quote_arg {
   # - is empty
   # then: needs to be quoted
   if [[ ! "$1" =~ [[:blank:]] ]] && [ "${1//
-/}" == "$1" ] && [ ! -z "$1" ]
+/}" = "$1" ] && [ ! -z "$1" ]
   then echo "${1//\'/\"\'\"}"; 
   else echo "'${1//\'/\'\"\'\"\'}'"
   fi
@@ -38,7 +38,7 @@ function quote_arg {
 
 # reading arguments
 all_args=
-if [ "$*" == "" ]; then
+if [ "$*" = "" ]; then
   # if there are no arguments, then show help
   HELP=YES
 fi
@@ -79,7 +79,7 @@ cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
 dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
 
 # display some info
-if [ "$NOINFO" == "NO" ]; then
+if [ "$NOINFO" = "NO" ]; then
   echo -e "$blue""git-hist-mv ""$dkyellow""$ver""$cdef"
   echo $dkgray$0$all_args$cdef
   debug_file "# git-hist-mv $ver $(date --utc +%FT%T.%3NZ)"
@@ -91,7 +91,7 @@ fi
 #BEGIN_AS_IS
 cl_op=$blue
 cl_colons=$dkgray
-if [ "$HELP" == "YES" ]; then
+if [ "$HELP" = "YES" ]; then
   echo "$white""# Help""$cdef"
   echo "Usage: "$dkgray"$0 "$cl_op"["$dkyellow"source and target"$cl_op"] "$cl_op"["$dkyellow"options"$cl_op"]"$cdef""
   echo $cl_op"["$dkyellow"source and target"$cl_op"]"$cl_colons":"$cdef
@@ -191,7 +191,7 @@ function proc_f_fname {
       _opt="${_fname:0:1}"
       _fname="${_fname:1}"
     fi
-    if [ "$_not" == "0" ] && [ "${_fname:0:1}" = "!" ]; then
+    if [ "$_not" = "0" ] && [ "${_fname:0:1}" = "!" ]; then
       _not="1"
       _fname="${_fname:1}"
     fi
@@ -201,7 +201,7 @@ function proc_f_fname {
         _fname="${_fname:1}"
       fi
     fi
-    if [ "$_single" == "1" ] && [ -z "$_opt" ]; then
+    if [ "$_single" = "1" ] && [ -z "$_opt" ]; then
       _opt="x"
     fi
     if [[ "ebcx" =~ "$_opt" ]]; then
@@ -219,7 +219,7 @@ function proc_f_fname {
       _fname="${_fname//\\Q/\(\.\*\)}"
       _fname="${_fname/#*([[:blank:]])/\(}"
       _fname="${_fname/%*([[:blank:]])/\)}"
-      if [ "$_single" == "0" ]; then
+      if [ "$_single" = "0" ]; then
         _fname="${_fname//+([[:blank:]])/\)\|\(}"
       fi
       if [ "$_opt" = "b" ]; then
@@ -257,11 +257,11 @@ function __git {
   do
     _all_args="$_all_args $(quote_arg "$i")"
   done
-  if [ "$SIMULATE" == "YES" ]
+  if [ "$SIMULATE" = "YES" ]
   then
     echo $blue"git"$yellow"$_all_args"$cdef
   else
-    if [ "$NOINFO" == "NO" ]; then
+    if [ "$NOINFO" = "NO" ]; then
       echo $blue"git"$yellow"$_all_args"$cdef
     fi
     eval git$_all_args
@@ -334,7 +334,7 @@ declare -x src_dir
 declare -x dst_dir
 
 print_var () { local cl_name="\e[38;5;146m" cl_value="\e[38;5;186m"; [ -v $1 ] && echo -e "$cl_name"$1"\e[0m"="$cl_value"${!1}"\e[0m"; }
-if [ "$NOINFO" == "NO" ]; then
+if [ "$NOINFO" = "NO" ]; then
   print_var src_branch
   print_var src_dir
   print_var dst_branch
@@ -360,7 +360,7 @@ if [ "$NOINFO" == "NO" ]; then
   fi
   print_var F_MIN_SIZE
   print_var F_MAX_SIZE
-  if [ "$SIMULATE" == "YES" ]; then
+  if [ "$SIMULATE" = "YES" ]; then
     print_var SIMULATE
   fi
 fi
@@ -383,22 +383,22 @@ if [ ! -z dst_branch ] && [ "${dst_branch//[[:blank:]]/}" != "$dst_branch" ]; th
   exit 1
 fi
 
-if [ "$DEL" == "NO" ] && [ -z "$dst_branch" ]; then
+if [ "$DEL" = "NO" ] && [ -z "$dst_branch" ]; then
   >&2 echo -e "\e[91m""Invalid usage, must specify a destination branch, --del or -d""\e[0m"
   exit 1
 fi
 
-if [ "$DEL" == "YES" ] && [ "$COPY" == "YES" ]; then
+if [ "$DEL" = "YES" ] && [ "$COPY" = "YES" ]; then
   >&2 echo -e "\e[91m""Invalid usage, --del or -d is not compatible with --copy or -c""\e[0m"
   exit 1
 fi
 
-if [ "$DEL" == "YES" ] && [ "$ZIP" == "YES" ]; then
+if [ "$DEL" = "YES" ] && [ "$ZIP" = "YES" ]; then
   >&2 echo -e "\e[91m""Invalid usage, --del or -d is not compatible with --zip or -z""\e[0m"
   exit 1
 fi
 
-if [ "$DEL" == "YES" ] && [ ! -z "$dst_branch" ]; then
+if [ "$DEL" = "YES" ] && [ ! -z "$dst_branch" ]; then
   >&2 echo -e "\e[91m""Invalid usage, destination branch must be empty when using --del or -d""\e[0m"
   exit 1
 fi
@@ -413,7 +413,7 @@ function is_file_selected {
   if [ -v F_PATH ]; then
     local _fpath="$_path"
     local _ci=""
-    if [ "$F_PATH_CI" == "1" ]; then _ci="I"; fi
+    if [ "$F_PATH_CI" = "1" ]; then _ci="I"; fi
     if [ "$_fpath" = "." ]; then _fpath=""; fi
     debug_file "        _fpath=$_fpath"
     echo "$_fpath" | sed -r "/$F_PATH/$_ci!{q100}" &>/dev/null
@@ -425,7 +425,7 @@ function is_file_selected {
   if [ -v F_DIR ]; then
     local directory=$(dirname "$_path")
     local _ci=""
-    if [ "$F_DIR_CI" == "1" ]; then _ci="I"; fi
+    if [ "$F_DIR_CI" = "1" ]; then _ci="I"; fi
     if [ "$directory" = "." ]; then directory=""; fi
     debug_file "        directory=$directory"
     echo "$directory" | sed -r "/$F_DIR/$_ci!{q100}" &>/dev/null
@@ -437,7 +437,7 @@ function is_file_selected {
   if [ -v F_FNAME ]; then
     local fname=$(basename "$_path")
     local _ci=""
-    if [ "$F_FNAME_CI" == "1" ]; then _ci="I"; fi
+    if [ "$F_FNAME_CI" = "1" ]; then _ci="I"; fi
     debug_file "        fname=$fname"
     echo "$fname" | sed -r "/$F_FNAME/$_ci!{q100}" &>/dev/null
     [ $? -eq 100 ]
@@ -481,12 +481,12 @@ function filter_ls_files {
     # - "-m": remove unselected files and move selected files from src_dir to dst_dir
 
     # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
-    ! [ "$1" == "-r" ]; TEST_REMOVE=$?
+    ! [ "$1" = "-r" ]; TEST_REMOVE=$?
 
     # see: /kb/path_pattern.sh
     if [ ! -z "$src_dir" ] && [[ ! "${path}" =~ ^(\")?"$src_dir"(\"|/|$) ]]; then
       TEST_SELECTED="0"
-    elif [ "$_has_filter" == "1" ]; then
+    elif [ "$_has_filter" = "1" ]; then
       # remember: 0=OK non-zero=FAIL
       # when negating: 0=FAIL 1=OK
       # TODO: optimization - use an associative array to remember is a file is selected or not by using the $sha hash
@@ -500,7 +500,7 @@ function filter_ls_files {
     debug_file "      TEST_SELECTED=$TEST_SELECTED"
 
     if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
-      if [ "$1" == "-m" ]; then
+      if [ "$1" = "-m" ]; then
         # see: /kb/path_pattern.sh
         if [ "$src_dir" != "$dst_dir" ]; then
           if [ -z "$src_dir" ]
@@ -569,15 +569,15 @@ declare -fx indent_prepend
 NEW_UUID="$(cat /dev/urandom | tr -dc '0-9A-F' | fold -w 32 | head -n 1)"
 tmp_branch="_temp_$NEW_UUID"
 # creating a temporary branch based on the source branch if needed
-if [ "$DEL" == "NO" ]; then
+if [ "$DEL" = "NO" ]; then
   # when not deleting a branch or a subfolder
   # the _temp branch is needed to do manipulations
   __git branch $tmp_branch $src_branch
 fi
 
 # if not copying, delete source files
-if [ "$COPY" == "NO" ]; then
-  if [ "$_has_filter" == 1 ]; then
+if [ "$COPY" = "NO" ]; then
+  if [ "$_has_filter" = 1 ]; then
     # if there are filters, then we need to remove file by file
     __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
     filter_ls_files -r | indent_prepend
@@ -597,11 +597,11 @@ if [ "$COPY" == "NO" ]; then
 fi
 
 # if we are only deleting something, then we are done
-if [ "$DEL" == "YES" ]; then
+if [ "$DEL" = "YES" ]; then
   exit 0
 fi
 
-if [ -z "$dst_dir" ] && [ "$_has_filter" == "0" ]; then
+if [ -z "$dst_dir" ] && [ "$_has_filter" = "0" ]; then
   # moving subdirectory to root with --subdirectory-filter
   if [ ! -z "$src_dir" ]; then
     __git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- "$tmp_branch"
@@ -643,7 +643,7 @@ __git update-ref -d refs/original/refs/heads/"$tmp_branch"
 unset -v rebase_hash
 if [ -v dst_branch_exists ]; then
   declare commit1=0 datetime1=0 commit2=0 datetime2=0
-  if [ "$SIMULATE" == "NO" ]; then
+  if [ "$SIMULATE" = "NO" ]; then
     #cannot simulate these commands
     { read commit1 datetime1 ; } <<< "$(git log --reverse --max-parents=0 --format="%H %at" "$dst_branch" | head -1)"
     { read commit2 datetime2 ; } <<< "$(git log --reverse --max-parents=0 --format="%H %at" "$tmp_branch" | head -1)"
@@ -689,9 +689,9 @@ fi
 
 # zipping timelines:
 if [ -v rebase_hash ]; then
-  if [ "$ZIP" == "YES" ]; then
+  if [ "$ZIP" = "YES" ]; then
     __git -c rebase.autoSquash=false rebase --autostash "$rebase_hash"
-  elif [ "$ZIP" == "NO" ]; then
+  elif [ "$ZIP" = "NO" ]; then
     echo -e "\e[94mTo zip the timelines you can run a git rebase on"
     echo -e "the commit \e[93m$rebase_hash\e[0m"
     echo -e "e.g. \e[97mgit -c rebase.autoSquash=false rebase --autostash "$rebase_hash"\e[0m"
