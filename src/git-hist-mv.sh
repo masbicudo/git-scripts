@@ -310,13 +310,13 @@ if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
     >&2 echo -e "\e[91m""Invalid usage, cannot determine the source branch""\e[0m"
     exit 1
   fi
-  source_branch_exists=TRUE
+  source_branch_existed=1
   if [ -z "$dst_branch" ]
   then
     dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
     dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
   else
-    dst_branch_exists=TRUE
+    dst_branch_existed=1
   fi
 
 elif [ -v "arg_3" ] && [ ! -v "arg_4" ]; then
@@ -365,7 +365,7 @@ if [ "$NOINFO" = "NO" ]; then
   fi
 fi
 
-if [ -z "$source_branch_exists" ]; then
+if [ ! -v source_branch_existed ]; then
   if ! git show-ref --verify --quiet refs/heads/$src_branch
   then
     >&2 echo -e "\e[91m""Invalid usage, source branch does not exist""\e[0m"
@@ -584,8 +584,9 @@ if [ "$COPY" = "NO" ]; then
     ' -- "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
-    __git branch -D $src_branch
+    __git branch -D "$src_branch"
     ZIP=
+    if [ "$dst_branch" = "$src_branch" ]; then unset -v dst_branch_existed; fi
   else
     # removing source directory from the source branch
     __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
@@ -641,7 +642,7 @@ __git update-ref -d refs/original/refs/heads/"$tmp_branch"
 
 # getting commit hashes and datetimes
 unset -v rebase_hash
-if [ -v dst_branch_exists ]; then
+if [ -v dst_branch_existed ]; then
   declare commit1=0 datetime1=0 commit2=0 datetime2=0
   if [ "$SIMULATE" = "NO" ]; then
     #cannot simulate these commands
@@ -663,7 +664,7 @@ fi
 
 # need to checkout because merge may result in conficts
 # it is a requirement of the merge command
-if [ -v dst_branch_exists ]
+if [ -v dst_branch_existed ]
 then
   __git checkout "$dst_branch"
   declare _cur_branch=
