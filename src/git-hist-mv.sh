@@ -51,8 +51,8 @@ do
     --path|-p)            F_PATH="$2"     ;all_args="$all_args $(quote_arg "$2")";shift;;
     --file-name|-fn)      F_FNAME="$2"    ;all_args="$all_args $(quote_arg "$2")";shift;;
     --dir)                F_DIR="$2"      ;all_args="$all_args $(quote_arg "$2")";shift;;
-    --min-size)           F_MIN_SIZE="$2" ;all_args="$all_args $(quote_arg "$2")";shift;;
-    --max-size)           F_MAX_SIZE="$2" ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --min-size|-nz)       F_MIN_SIZE="$2" ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --max-size|-xz)       F_MAX_SIZE="$2" ;all_args="$all_args $(quote_arg "$2")";shift;;
     --delete|--del|-d)    DEL=YES       ;;
     --zip|-z)             ZIP=YES       ;;
     --copy|-c)            COPY=YES      ;;
@@ -121,9 +121,9 @@ if [ "$HELP" = "YES" ]; then
   echo "  "$yellow"--copy "$cl_op"or "$yellow"-c"$cl_colons":"                               $white"copy instead of move"
   echo "  "$yellow"--delete "$cl_op"or "$yellow"--del "$cl_op"or "$yellow"-d"$cl_colons":"   $white"delete instead of move"
   echo "  "$yellow"--simulate "$cl_op"or "$yellow"--sim "$cl_op"or "$yellow"-s"$cl_colons":" $white"show all git commands instead of executing them"
-  echo "  "$yellow"--file-name "$cl_op"or "$yellow"--fn"$cl_colons":" $white"filter by filename"
+  echo "  "$yellow"--file-name "$cl_op"or "$yellow"-fn"$cl_colons":" $white"filter by filename"
   echo "  "$yellow"--dir"$cl_colons":" $white"filter by dirname"
-  echo "  "$yellow"--path "$cl_op"or "$yellow"--p"$cl_colons":" $white"filter by path (directory and file name)"
+  echo "  "$yellow"--path "$cl_op"or "$yellow"-p"$cl_colons":" $white"filter by path (directory and file name)"
   echo "    "$dkgreen"Note"$cl_colons": "$cdef
   echo "      "When filtering by a string, you can preceed the string with some options:
   echo "      "- '"r"' to indicate a regex filter 'r"^(some|file)"'
@@ -140,8 +140,8 @@ if [ "$HELP" = "YES" ]; then
   echo "        "e.g. "'!e=.png'"
   echo "      "Use "'='" to indicate a single pattern, insetead of many separated by spaces.
   echo "      "Use of "'='" or "'!='" alone imply option "'x'".
-  echo "  "$yellow"--min-size"$cl_colons":" $white"filter by minimum file size"
-  echo "  "$yellow"--max-size"$cl_colons":" $white"filter by maximum file size"
+  echo "  "$yellow"--min-size "$cl_op"or "$yellow"-nz"$cl_colons":" $white"filter by minimum file size"
+  echo "  "$yellow"--max-size "$cl_op"or "$yellow"-xz"$cl_colons":" $white"filter by maximum file size"
   echo "    "$dkgreen"Note"$cl_colons": "$cdef
   echo "      "When filtering by file size, you can append units to the number:
   echo "        "e.g. "100MB"
