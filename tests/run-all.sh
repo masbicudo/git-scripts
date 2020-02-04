@@ -11,3 +11,4 @@ function runat() {
 }
 runat "git-hist-apply-tests"
 runat "git-hist-mv-tests"
+runat "git-hist-nbstripout-tests"

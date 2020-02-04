@@ -526,6 +526,24 @@ function filter_ls_files {
 }
 declare -fx filter_ls_files
 
+function indent_prepend {
+  local tab=$(echo -e '\t') IFS= line= trimmed= nocolors=
+  while read line; do
+    trimmed=`sed -E 's/[[:blank:]]+//g' <<< "${line}"`
+    nocolors=`sed 's/\x1B\[[0-9;]\+[A-Za-z]//g;s/\x0f//g' <<< "${trimmed}"`
+    if ! [[ -z "$nocolors" ]]; then break; fi
+    echo -n "$trimmed"
+  done
+  if ! [[ -z "$nocolors" ]]; then
+    echo ""
+    echo "$tab$line"
+  fi
+  while read line; do
+    echo "$tab$line"
+  done
+}
+declare -fx indent_prepend
+
 # General logic:
 # 1) create a temporary branch based on the source branch
 # 2) alter the source branch when moving or deleting files, by deleting the source directory
@@ -562,8 +580,7 @@ if [ "$COPY" == "NO" ]; then
   if [ "$_has_filter" == 1 ]; then
     # if there are filters, then we need to remove file by file
     __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-    echo "" ;
-    filter_ls_files -r | sed "s/^/\t/"
+    filter_ls_files -r | indent_prepend
     ' -- "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
@@ -572,8 +589,7 @@ if [ "$COPY" == "NO" ]; then
   else
     # removing source directory from the source branch
     __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-      echo "" ;
-      git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"' | sed "s/^/\t/"
+      git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"' | indent_prepend
       ' -- "$src_branch"
   fi
   # deleting 'original' branches (git creates these as backups)
@@ -617,8 +633,7 @@ else
   }
   declare -fx filter_to_move
   __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-    echo "" ;
-    filter_to_move | sed "s/^/\t/"
+    filter_to_move | indent_prepend
     ' -- "$tmp_branch"
 fi
 # deleting 'original' branches (git creates these as backups)
