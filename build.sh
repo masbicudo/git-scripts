@@ -4,11 +4,6 @@ cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
 dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
 
 # reading arguments
-all_args=
-if [ "$*" == "" ]; then
-  # if there are no arguments, then show help
-  HELP=YES
-fi
 argc=0
 while [[ $# -gt 0 ]]
 do
@@ -33,27 +28,32 @@ do
   esac
   shift
 done
-if [ ! -v BUILD_PATH ]; then BUILD_PATH="build"; fi
 
 if [ -v SAVE_SETTINGS ] && [ -v LOAD_SETTINGS ]; then
   >&2 echo -e "\e[91m""Invalid usage, cannot load and save at the same time""\e[0m"
   exit 1
 fi
 
-if [ -v SAVE_SETTINGS ]; then
+if [ "$*" == "" ] && [ -f "settings.txt" ]; then
+  LOAD_PATH="settings.txt"
+fi
+
+if [ ! -z "$SAVE_PATH" ]; then
   echo "BUILD_PATH='$BUILD_PATH'" > "$SAVE_PATH"
   echo "INSTALL_PATH='$INSTALL_PATH'" >> "$SAVE_PATH"
 fi
-if [ -v LOAD_SETTINGS ]; then
+if [ ! -z "$LOAD_PATH" ]; then
   # ref: https://www.cyberciti.biz/faq/unix-howto-read-line-by-line-from-file/
   while IFS=" " read -r var_name var_value
   do
-    declare "$var_name"="$var_value"
+    [ ! -v "$var_name" ] && declare "$var_name"="$var_value"
   done <<< "$(sed -r '
     /^(BUILD_PATH|INSTALL_PATH)=(.*)$/!d;
     s/=/ /;
     ' "$LOAD_PATH")"
 fi
+
+if [ ! -v BUILD_PATH ]; then BUILD_PATH="build"; fi
 
 print_var () { local cl_name="\e[38;5;146m" cl_value="\e[38;5;186m"; [ -v $1 ] && echo -e "$cl_name"$1"\e[0m"="$cl_value"${!1}"\e[0m"; }
 print_var SAVE_PATH
@@ -77,8 +77,10 @@ do
   }' "$f" > "$BUILD_PATH/$(basename "$f")"
 done
 
-[ ! -d "$INSTALL_PATH" ] && mkdir "$INSTALL_PATH"
-for f in ./src/*.sh
-do
-  cp -Rf "$BUILD_PATH"/. "$INSTALL_PATH"/
-done
+if [ ! -z "$INSTALL_PATH" ]; then
+  [ ! -d "$INSTALL_PATH" ] && mkdir "$INSTALL_PATH"
+  for f in ./src/*.sh
+  do
+    cp -Rf "$BUILD_PATH"/. "$INSTALL_PATH"/
+  done
+fi
