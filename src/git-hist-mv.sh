@@ -1,6 +1,13 @@
 #!/bin/bash
 ver=v0.3.5
 
+# TODO: use source with BASH_SOURCE to import code and make
+# utility functions reusable between git-hist-* scripts.
+# ref: https://stackoverflow.com/questions/192292/how-best-to-include-other-scripts
+include_path="$(dirname $(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null||echo $0))/inc"
+echo include_path="$include_path"
+#if [[ ! -d "$include_path" ]]; then include_path="$PWD"; fi
+
 # argument variables
 ZIP=NO
 COPY=NO
@@ -10,10 +17,7 @@ HELP=NO
 NOINFO=NO
 
 #BEGIN_DEBUG
-function debug { echo "[92m$@[0m"; }
-declare -fx debug
-function debug_file { touch "/tmp/__debug.git-hist-mv.txt"; echo "$@" >> "/tmp/__debug.git-hist-mv.txt"; }
-declare -fx debug_file
+. "$include_path/debug.sh"
 #END_DEBUG
 
 function quote_arg {
