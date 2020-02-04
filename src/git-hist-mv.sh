@@ -561,7 +561,10 @@ fi
 if [ "$COPY" == "NO" ]; then
   if [ "$_has_filter" == 1 ]; then
     # if there are filters, then we need to remove file by file
-    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter 'filter_ls_files -r' -- "$src_branch"
+    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+    echo "" ;
+    filter_ls_files -r | sed "s/^/\t/"
+    ' -- "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
     __git branch -D $src_branch
@@ -569,7 +572,8 @@ if [ "$COPY" == "NO" ]; then
   else
     # removing source directory from the source branch
     __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-      git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"'
+      echo "" ;
+      git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"' | sed "s/^/\t/"
       ' -- "$src_branch"
   fi
   # deleting 'original' branches (git creates these as backups)
@@ -612,7 +616,10 @@ else
     if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
   }
   declare -fx filter_to_move
-  __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter 'filter_to_move' -- "$tmp_branch"
+  __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+    echo "" ;
+    filter_to_move | sed "s/^/\t/"
+    ' -- "$tmp_branch"
 fi
 # deleting 'original' branches (git creates these as backups)
 __git update-ref -d refs/original/refs/heads/"$tmp_branch"
