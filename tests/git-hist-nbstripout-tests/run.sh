@@ -1,5 +1,5 @@
 #!/bin/bash
-test_group_name="git-hist-file-apply"
+test_group_name="git-hist-nbstripout"
 
 red=[91m;green=[92m;cdef=[0m;white=[97m
 

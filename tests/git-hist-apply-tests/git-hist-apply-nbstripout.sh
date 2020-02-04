@@ -5,6 +5,7 @@ echo -e "\e[91m""git-hist-apply $test_name""\e[0m"
 
 . ../shared/params.sh
 . ../shared/upsearch.sh
+. ../shared/check.sh
 git_hist_apply=$(upsearch "src/git-hist-apply.sh")
 
 if [ ! -z "$_PREPARE" ]; then
@@ -20,13 +21,13 @@ if [ ! -z "$_PREPARE" ]; then
 
     git checkout --orphan "b1"
     git rm -rf .
-    cp ../a.ipynb "a.ipynb"
+    cp ../x.ipynb "a.ipynb"
     git add -A
     git commit -a -m "added a.ipynb"
 
   sleep 1
 
-    cp ../b.ipynb "b.ipynb"
+    cp ../x.ipynb "b.ipynb"
     git add -A
     git commit -a -m "added b.ipynb"
 
@@ -51,10 +52,10 @@ fi
 
 _RET_CODE=0
 if [ ! -z "$_ASSERT" ]; then
-  test -e "a.ipynb" || { _RET_CODE=1; echo "a not found!"; }
-  test -e "b.ipynb" || { _RET_CODE=1; echo "b not found!"; }
-  [ "$_RET_CODE" -eq "0" ] && (diff "a.ipynb" "../a.ipynb" >/dev/null 2>&1) && { _RET_CODE=1; echo "a unchanged!"; }
-  [ "$_RET_CODE" -eq "0" ] && (diff "b.ipynb" "../b.ipynb" >/dev/null 2>&1) && { _RET_CODE=1; echo "b unchanged!"; }
+  check -e "a.ipynb" || _RET_CODE=1
+  check -e "b.ipynb" || _RET_CODE=1
+  check -neq "a.ipynb" "../x.ipynb" || _RET_CODE=1
+  check -neq "b.ipynb" "../x.ipynb" || _RET_CODE=1
 fi
 
 popd
