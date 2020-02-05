@@ -9,6 +9,39 @@ SIMULATE=NO
 HELP=NO
 NOINFO=NO
 
+# color variables
+dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
+cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
+dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
+
+# checking terminal
+if [ "${SHELL%%/bin/bash}" = "$SHELL" ]; then
+  >&2 echo $red"Only bash is supported at the moment, current is $SHELL"$cdef
+  exit 11
+fi
+
+# check OS
+if [[ "$OSTYPE" == "linux-gnu" ]]; then os_not_supported=1
+  # Linux
+elif [[ "$OSTYPE" == "darwin"* ]]; then os_not_supported=1
+  # Mac OSX
+elif [[ "$OSTYPE" == "cygwin" ]]; then os_not_supported=1
+  # POSIX compatibility layer and Linux environment emulation for Windows
+elif [[ "$OSTYPE" == "msys" ]]; then os_not_supported=0
+  # Lightweight shell and GNU utilities compiled for Windows (part of MinGW)
+elif [[ "$OSTYPE" == "win32" ]]; then os_not_supported=1
+  # I'm not sure this can happen.
+elif [[ "$OSTYPE" == "freebsd"* ]]; then os_not_supported=1
+  # FreeBSD
+else os_not_supported=1
+  # Unknown.
+fi
+
+if [ "$os_not_supported" = "1" ]; then
+  >&2 echo $red"Only msys is supported at the moment, current is $OSTYPE"$cdef
+  exit 11
+fi
+
 #BEGIN_DEBUG
 function debug { echo "[92m$@[0m"; }
 declare -fx debug
@@ -73,11 +106,6 @@ then
   _has_filter=1
 fi
 
-# color variables
-dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
-cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
-dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
-
 # display some info
 if [ "$NOINFO" = "NO" ]; then
   echo -e "$blue""git-hist-mv ""$dkyellow""$ver""$cdef"
@@ -86,6 +114,30 @@ if [ "$NOINFO" = "NO" ]; then
   debug_file "  $(pwd)"
   debug_file "  $0$all_args"
 fi
+
+# checking git version
+if ! which git > /dev/null 2>&1; then
+  >&2 echo $red"git is not installed"$cdef
+  __error=1
+fi
+git_ver=$(git --version)
+git_ver_SEP=$(echo "$git_ver" | sed 's/[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*/_SEPARATOR_/')
+git_ver_s=$(echo "$git_ver_SEP" | sed 's/_SEPARATOR_.*$//')
+git_ver_e=$(echo "$git_ver_SEP" | sed 's/^.*_SEPARATOR_//')
+git_ver=${git_ver#"$git_ver_s"}
+git_ver=${git_ver%"$git_ver_e"}
+min_supported_git_ver=2.23.0
+read min_git_ver <<< $(echo "$min_supported_git_ver
+$git_ver" | sort -t '.' -k 1,1 -k 2,2 -k 3,3 -k 4,4)
+if [ "$min_git_ver" = "$git_ver" ] && [ "$min_git_ver" != "$min_supported_git_ver" ]; then
+  >&2 echo $red"Error: minimum supported git version is $min_supported_git_ver"$cdef
+  __error=1
+fi
+
+print_var () { local cl_name="\e[38;5;146m" cl_value="\e[38;5;186m"; [ -v $1 ] && echo -e "$cl_name"$1"\e[0m"="$cl_value"${!1}"\e[0m"; }
+print_var SHELL
+print_var OSTYPE
+print_var git_ver
 
 # help screen
 #BEGIN_AS_IS
@@ -150,6 +202,9 @@ if [ "$HELP" = "YES" ]; then
   exit 0
 fi
 #END_AS_IS
+
+if [ -v __error ]; then exit 11; fi
+
 function convert_to_bytes {
   # Converts a number of data units into bytes:
   # - Supports K, M, G, T, E
@@ -333,7 +388,6 @@ fi
 declare -x src_dir
 declare -x dst_dir
 
-print_var () { local cl_name="\e[38;5;146m" cl_value="\e[38;5;186m"; [ -v $1 ] && echo -e "$cl_name"$1"\e[0m"="$cl_value"${!1}"\e[0m"; }
 if [ "$NOINFO" = "NO" ]; then
   print_var src_branch
   print_var src_dir
