@@ -45,6 +45,7 @@ if [ ! -z "$_EXEC" ]; then
     git branch b1s "b1'"
     "$git_hist_mv" "b1s/d 2" "b1s/d 3" --zip
 fi
+git checkout b1s
 
 # cleanup
 if [ -z "$_KEEP_BRANCHES" ]; then

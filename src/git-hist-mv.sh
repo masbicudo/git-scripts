@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=v0.3.5
+ver=v0.3.6
 
 # argument variables
 ZIP=NO
@@ -398,6 +398,10 @@ if [ "$DEL" = "YES" ] && [ "$ZIP" = "YES" ]; then
   exit 1
 fi
 
+if [ "$ZIP" = "YES" ] && [ "$COPY" = "NO" ] && [ "$src_branch" = "$dst_branch" ]; then
+  >&2 echo -e "$red""Warning: "$dkyellow"zip does nothing when moving inside a single branch""\e[0m"
+fi
+
 if [ "$DEL" = "YES" ] && [ ! -z "$dst_branch" ]; then
   >&2 echo -e "\e[91m""Invalid usage, destination branch must be empty when using --del or -d""\e[0m"
   exit 1
@@ -475,6 +479,7 @@ function filter_ls_files {
     # if $1 contains:
     # - "-r": remove selected files, and keed unselected files
     # - "-m": remove unselected files and move selected files from src_dir to dst_dir
+    # - "-s": move selected files from src_dir to dst_dir
 
     # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
     ! [ "$1" = "-r" ]; TEST_REMOVE=$?
@@ -496,7 +501,7 @@ function filter_ls_files {
     debug_file "      TEST_SELECTED=$TEST_SELECTED"
 
     if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
-      if [ "$1" = "-m" ]; then
+      if [ "$1" = "-m" ] || [ "$1" = "-s" ]; then
         # see: /kb/path_pattern.sh
         if [ "$src_dir" != "$dst_dir" ]; then
           if [ -z "$src_dir" ]
@@ -509,9 +514,12 @@ function filter_ls_files {
       fi
       debug_file "      update-index $mode $sha $stage $path"
       printf "$mode $sha $stage\t$path\n"
-    else
+    elif [ "$1" != "-s" ]; then
       __rm_files+=("$path")
       debug_file "      __rm_files+=($path)"
+    else
+      debug_file "      update-index $mode $sha $stage $path"
+      printf "$mode $sha $stage\t$path\n"
     fi
   done <<< "$(git ls-files --stage)"
 
@@ -521,6 +529,29 @@ function filter_ls_files {
   fi
 }
 declare -fx filter_ls_files
+function index_filter {
+  # using filter-branch/index-filter, update-index/index-info and rm/cached to move and delete files
+  # - filter-branch/index-filter iterates each commit without checking out each commit
+  # - update-index/index-info changes multiple file pathes in a commit
+  # - filter_ls_files is used to get a list of files in a format supported by update-index
+  #     and it also deletes files that are not returned to the update-index command
+  #     example output line:
+  #       100644 9ff97a979712c881faa31edb5087c0e758ecfc05 0       dir_name/file_name.txt
+  debug ""
+  debug _has_filter=$_has_filter
+  debug "GIT_INDEX_FILE=$GIT_INDEX_FILE"
+  debug "GIT_COMMIT=$GIT_COMMIT"
+  debug "src_dir=$src_dir"
+  debug "dst_dir=$dst_dir"
+  local _PATHS=`filter_ls_files $1`
+  debug "$_PATHS"
+  if [ -z "$_PATHS" ]; then return; fi
+  # ref: https://unix.stackexchange.com/questions/358850/what-are-all-the-ways-to-create-a-subshell-in-bash
+  # ref: https://unix.stackexchange.com/questions/153587/environment-variable-assignment-followed-by-command
+  echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --remove --index-info
+  if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
+}
+declare -fx index_filter
 
 function indent_prepend {
   local tab=$(echo -e '\t') IFS= line= trimmed= nocolors=
@@ -562,21 +593,30 @@ declare -fx indent_prepend
 # GIT_INTERNAL_GETTEXT_SH_SCHEME=fallthrough
 # GIT_WORK_TREE=.
 
-NEW_UUID="$(cat /dev/urandom | tr -dc '0-9A-F' | fold -w 32 | head -n 1)"
-tmp_branch="_temp_$NEW_UUID"
 # creating a temporary branch based on the source branch if needed
 if [ "$DEL" = "NO" ]; then
-  # when not deleting a branch or a subfolder
-  # the _temp branch is needed to do manipulations
-  __git branch $tmp_branch $src_branch
+  if [ "$src_branch" != "$dst_branch" ] || [ "$COPY" = "YES" ]; then
+    # A temporary branch is needed to do manipulations when:
+    # - not deleting a branch or files inside a branch
+    # - not moving files inside a branch
+    NEW_UUID="$(cat /dev/urandom | tr -dc '0-9A-F' | fold -w 32 | head -n 1)"
+    tmp_branch="_temp_$NEW_UUID"
+    __git branch $tmp_branch $src_branch
+  fi
 fi
 
+# if moving inside a branch, just do the moving
 # if not copying, delete source files
 if [ "$COPY" = "NO" ]; then
-  if [ "$_has_filter" = 1 ]; then
+  if [ "$DEL" = "NO" ] && [ "$src_branch" = "$dst_branch" ]; then
+    # if moving inside a single branch, do it at once
+    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+    index_filter -s | indent_prepend
+    ' -- "$src_branch"
+  elif [ "$_has_filter" = 1 ]; then
     # if there are filters, then we need to remove file by file
     __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-    filter_ls_files -r | indent_prepend
+    index_filter -r | indent_prepend
     ' -- "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
@@ -593,8 +633,8 @@ if [ "$COPY" = "NO" ]; then
   __git update-ref -d refs/original/refs/heads/"$src_branch"
 fi
 
-# if we are only deleting something, then we are done
-if [ "$DEL" = "YES" ]; then
+# if we are only deleting something or moving inside a branch, then we are done
+if [ ! -v tmp_branch ]; then
   exit 0
 fi
 
@@ -606,31 +646,9 @@ if [ -z "$dst_dir" ] && [ "$_has_filter" = "0" ]; then
     __git update-ref -d refs/original/refs/heads/"$tmp_branch"
   fi
 else
-  # using filter-branch/index-filter, update-index/index-info and rm/cached to move and delete files
-  # - filter-branch/index-filter iterates each commit without checking out each commit
-  # - update-index/index-info changes multiple file pathes in a commit
-  # - filter_ls_files is used to get a list of files in a format supported by update-index
-  #     and it also deletes files that are not returned to the update-index command
-  #     example output line:
-  #       100644 9ff97a979712c881faa31edb5087c0e758ecfc05 0       dir_name/file_name.txt
-  function filter_to_move {
-    debug ""
-    debug _has_filter=$_has_filter
-    debug "GIT_INDEX_FILE=$GIT_INDEX_FILE"
-    debug "GIT_COMMIT=$GIT_COMMIT"
-    debug "src_dir=$src_dir"
-    debug "dst_dir=$dst_dir"
-    local _PATHS=`filter_ls_files -m`
-    debug "$_PATHS"
-    if [ -z "$_PATHS" ]; then return; fi
-    # ref: https://unix.stackexchange.com/questions/358850/what-are-all-the-ways-to-create-a-subshell-in-bash
-    # ref: https://unix.stackexchange.com/questions/153587/environment-variable-assignment-followed-by-command
-    echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --remove --index-info
-    if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
-  }
   declare -fx filter_to_move
   __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-    filter_to_move | indent_prepend
+    index_filter -m | indent_prepend
     ' -- "$tmp_branch"
 fi
 # deleting 'original' branches (git creates these as backups)
