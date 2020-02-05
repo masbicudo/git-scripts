@@ -13,6 +13,7 @@ do
   i="$1"
   has_args=1
   case $i in
+    --help|-h|\/\?|\?)    HELP="1"  ;shift;;
     --release|-r)         RELEASE_MSG="$2"  ;shift;;
     --install|-i)         INSTALL_PATH="$2" ;shift;;
     --path|-p)            BUILD_PATH="$2"   ;shift;;
@@ -21,13 +22,19 @@ do
       then USE_SETTINGS="SAVE"; SAVE_SETTINGS="1"
       else USE_SETTINGS="LOAD"; LOAD_SETTINGS="1"
       fi
+      
       if [ ! -z "$2" ] && ! [[ "$2" =~ ^- ]]; then
-        SETTINGS_BRANCH="$2"; shift;
+        if [ ! -z "$3" ] && ! [[ "$3" =~ ^- ]]; then
+          SETTINGS_BRANCH="$2";
+          SETTINGS_PATH="$3"; shift; shift;
+        else
+          SETTINGS_BRANCH="$2"; shift;
+          SETTINGS_PATH="settings.txt"
+        fi
       else
         >&2 echo -e "\e[91m""Invalid usage, must specify a branch name""\e[0m"
         exit 1
       fi
-      SETTINGS_PATH="settings.txt"
       ;;
     --save|-s)
       SAVE_SETTINGS="1"
@@ -65,6 +72,41 @@ do
   esac
   shift
 done
+
+if [ -v HELP ]; then
+
+echo "$blue""Build tool$cdef for $yellow""git-scripts""$cdef by $red""MASBicudo$cdef
+
+\`./build.sh\` [options]
+[options]
+  --path|-p:    indicates the target build path
+  --install|-i: indicates a place to install the files
+  --release|-r: indicates a branch name to save a release build to
+  --branch|-b:  indicates a branch to get the source to build from
+  #Settings options
+  --save-branch|-sb: indicates a branch to save the settings file to
+  --load-branch|-lb: indicates a branch to load the settings file from
+  --save|-s:         indicates a file name to save the settings to
+  --load|-l:         indicates a file name to load the settings from
+  >Note: all these arguments support 2 more arguments. In that case,
+  >  the first following argument is always a branch name and the
+  >  second is a file name.
+" | sed -r '
+  /[[:blank:]]*>/!{
+    s/\[(.*)\]/['$dkyellow'\1'$cdef']/g;
+    s/`([^`]*)`/'$dkgray'\1'$cdef'/g;
+    s/\|-/ '$blue'or'$cdef' -/g;
+    s/:/'$dkgray':'$cdef'/g;
+    s/([[:blank:]]*)#(.*)/\1'$white'\2'$cdef'/g;
+    s/--?[[:alnum:]]*/'$yellow'\0'$cdef'/g;
+  };
+  /[[:blank:]]*>/ {
+    s/([[:blank:]]*)>(.*):/\1'$green'\2'$dkgray':'$dkgreen'/g;
+    s/([[:blank:]]*)>(.*)/\1'$dkgreen'\2'$cdef'/g;
+  }
+'
+exit 0
+fi
 
 if [ -v BRANCH ] && [ -z "$BRANCH" ]; then
   >&2 echo -e "\e[91m""Invalid usage, if branch is specified it must exist""\e[0m"
