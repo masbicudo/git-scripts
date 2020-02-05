@@ -16,7 +16,20 @@ do
     --release|-r)         RELEASE_MSG="$2"  ;shift;;
     --install|-i)         INSTALL_PATH="$2" ;shift;;
     --path|-p)            BUILD_PATH="$2"   ;shift;;
-    --save|-s)
+    --save-branch|-sb|--load-branch|-lb)
+      if [[ $i =~ --save|-s ]]
+      then USE_SETTINGS="SAVE"; SAVE_SETTINGS="1"
+      else USE_SETTINGS="LOAD"; LOAD_SETTINGS="1"
+      fi
+      if [ ! -z "$2" ] && ! [[ "$2" =~ ^- ]]; then
+        SETTINGS_BRANCH="$2"; shift;
+      else
+        >&2 echo -e "\e[91m""Invalid usage, must specify a branch name""\e[0m"
+        exit 1
+      fi
+      SETTINGS_PATH="settings.txt"
+      ;;
+    --save|-s|--load-branch|-lb)
       SAVE_SETTINGS="1"
       USE_SETTINGS="SAVE"
       if [ ! -z "$2" ] && ! [[ "$2" =~ ^- ]]; then
