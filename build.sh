@@ -167,6 +167,7 @@ if [ -v USE_SETTINGS ]; then
   fi
   if [ -v tmp_dir ]; then
     mv -f "$tmp_dir"/"$SETTINGS_PATH" ./"$SETTINGS_PATH"
+    rm -r "$tmp_dir"
   fi | sed "s/^/  /"
   unset -v tmp_dir
   if [ -v prev_branch ]; then
@@ -238,6 +239,7 @@ if [ -v BRANCH ]; then
   if [ -v tmp_dir ]; then
     rm -r ./src
     mv "$tmp_dir"/src ./
+    rm -r "$tmp_dir"
   fi
   if [ -v prev_branch ]; then
     __git symbolic-ref HEAD "$prev_branch"
