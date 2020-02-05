@@ -13,6 +13,7 @@ do
   i="$1"
   has_args=1
   case $i in
+    --release|-r)         RELEASE_MSG="$2"  ;shift;;
     --install|-i)         INSTALL_PATH="$2" ;shift;;
     --path|-p)            BUILD_PATH="$2"   ;shift;;
     --save|-s)
@@ -95,4 +96,16 @@ if [ ! -z "$INSTALL_PATH" ]; then
   do
     cp -Rf "$BUILD_PATH"/. "$INSTALL_PATH"/
   done
+fi
+
+if [ -v RELEASE_MSG ]; then
+  branch=$(git symbolic-ref HEAD)
+  git symbolic-ref HEAD refs/heads/release
+  git reset
+  git checkout HEAD -- .gitignore
+  git add ./build
+  git commit -m "$RELEASE_MSG"
+  git symbolic-ref HEAD "$branch"
+  git checkout HEAD -- .gitignore
+  git reset
 fi
