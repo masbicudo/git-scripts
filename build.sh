@@ -17,7 +17,7 @@ do
     --install|-i)         INSTALL_PATH="$2" ;shift;;
     --path|-p)            BUILD_PATH="$2"   ;shift;;
     --save-branch|-sb|--load-branch|-lb)
-      if [[ $i =~ --save|-s ]]
+      if [[ $i =~ --save-branch|-sb ]]
       then USE_SETTINGS="SAVE"; SAVE_SETTINGS="1"
       else USE_SETTINGS="LOAD"; LOAD_SETTINGS="1"
       fi
@@ -29,7 +29,7 @@ do
       fi
       SETTINGS_PATH="settings.txt"
       ;;
-    --save|-s|--load-branch|-lb)
+    --save|-s)
       SAVE_SETTINGS="1"
       USE_SETTINGS="SAVE"
       if [ ! -z "$2" ] && ! [[ "$2" =~ ^- ]]; then
@@ -76,7 +76,7 @@ if [ -v SAVE_SETTINGS ] && [ -v LOAD_SETTINGS ]; then
   exit 1
 fi
 
-if [ ! -v has_args ] && [ -f "settings.txt" ]; then
+if [ ! -v BUILD_PATH ] && [ ! -v INSTALL_PATH ] && [ -f "settings.txt" ]; then
   SETTINGS_PATH="settings.txt"
   USE_SETTINGS="LOAD"
 fi
@@ -179,13 +179,18 @@ fi
 
 if [ ! -v BUILD_PATH ]; then BUILD_PATH="build"; fi
 
-INSTALL_PATH=`dirname $INSTALL_PATH`/`basename $INSTALL_PATH`
+[ -v INSTALL_PATH ] && INSTALL_PATH=`dirname $INSTALL_PATH`/`basename $INSTALL_PATH`
 
 echo "$white"Build options:"$cdef"
 print_var BRANCH
 print_var BUILD_PATH
 print_var INSTALL_PATH
 print_var RELEASE_MSG
+
+if [ "$INSTALL_PATH" = "/" ]; then
+  >&2 echo -e "\e[91m"Cannot install to the root"$cdef"
+  exit 1
+fi
 
 # checking out the branch to build
 if [ -v BRANCH ]; then
@@ -209,6 +214,15 @@ fi
 
 # building the src folder to the output build path
 if [ ! -z "$BUILD_PATH" ] && [ "$BUILD_PATH" != "." ] && [ "$BUILD_PATH" != ".." ]; then
+  current_branch=$(git symbolic-ref HEAD)
+  if [ "$current_branch" != "refs/heads/master" ]
+  then ver_append=$cdef' ('$red"$current_branch"$cdef')'
+  else ver_append=$cdef' ('$dkgreen"$current_branch"$cdef')'
+  fi
+  ver_append="${ver_append//\\/\\\\}"
+  ver_append="${ver_append//\(/\\\(}"
+  ver_append="${ver_append//\//\\\/}"
+  echo ver_append="$ver_append"
   echo "$white"building the src folder to the output build path"$cdef"
   rm -rf "$BUILD_PATH"
   [ ! -d "$BUILD_PATH" ] && mkdir "$BUILD_PATH"
@@ -226,7 +240,8 @@ if [ ! -z "$BUILD_PATH" ] && [ "$BUILD_PATH" != "." ] && [ "$BUILD_PATH" != ".."
       2,${/^ *debug/d};
       2,${/^ *#.*$/d};
       /^ *$/d;
-      s/^ *//
+      s/^ *//;
+      /^ver=/ s/$/"'"$ver_append"'"/
     };
     2,${/^ *#(BEGIN|END)_AS_IS\b.*$/d
     }' "$f" > "$_file"
