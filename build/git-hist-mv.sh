@@ -1,11 +1,30 @@
 #!/bin/bash
-ver=v0.3.5
+ver=v0.3.6"[0m ([32mrefs/heads/master[0m)"
 ZIP=NO
 COPY=NO
 DEL=NO
 SIMULATE=NO
 HELP=NO
 NOINFO=NO
+dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
+cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
+dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
+if [ "${SHELL%%/bin/bash}" = "$SHELL" ]; then
+>&2 echo $red"Only bash is supported at the moment, current is $SHELL"$cdef
+exit 11
+fi
+if [[ "$OSTYPE" == "linux-gnu" ]]; then os_not_supported=1
+elif [[ "$OSTYPE" == "darwin"* ]]; then os_not_supported=1
+elif [[ "$OSTYPE" == "cygwin" ]]; then os_not_supported=1
+elif [[ "$OSTYPE" == "msys" ]]; then os_not_supported=0
+elif [[ "$OSTYPE" == "win32" ]]; then os_not_supported=1
+elif [[ "$OSTYPE" == "freebsd"* ]]; then os_not_supported=1
+else os_not_supported=1
+fi
+if [ "$os_not_supported" = "1" ]; then
+>&2 echo $red"Only msys is supported at the moment, current is $OSTYPE"$cdef
+exit 11
+fi
 function quote_arg {
 if [[ $# -eq 0 ]]; then return 1; fi
 if [[ ! "$1" =~ [[:blank:]] ]] && [ "${1//
@@ -48,13 +67,31 @@ if [ -v F_FNAME ] || [ -v F_DIR ] || [ -v F_MIN_SIZE ] || [ -v F_MAX_SIZE ]
 then
 _has_filter=1
 fi
-dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
-cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
-dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
 if [ "$NOINFO" = "NO" ]; then
 echo -e "$blue""git-hist-mv ""$dkyellow""$ver""$cdef"
 echo $dkgray$0$all_args$cdef
 fi
+if ! which git > /dev/null 2>&1; then
+>&2 echo $red"git is not installed"$cdef
+__error=1
+fi
+git_ver=$(git --version)
+git_ver_SEP=$(echo "$git_ver" | sed 's/[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*/_SEPARATOR_/')
+git_ver_s=$(echo "$git_ver_SEP" | sed 's/_SEPARATOR_.*$//')
+git_ver_e=$(echo "$git_ver_SEP" | sed 's/^.*_SEPARATOR_//')
+git_ver=${git_ver#"$git_ver_s"}
+git_ver=${git_ver%"$git_ver_e"}
+min_supported_git_ver=2.23.0
+read min_git_ver <<< $(echo "$min_supported_git_ver
+$git_ver" | sort -t '.' -k 1,1 -k 2,2 -k 3,3 -k 4,4)
+if [ "$min_git_ver" = "$git_ver" ] && [ "$min_git_ver" != "$min_supported_git_ver" ]; then
+>&2 echo $red"Error: minimum supported git version is $min_supported_git_ver"$cdef
+__error=1
+fi
+print_var () { local cl_name="\e[38;5;146m" cl_value="\e[38;5;186m"; [ -v $1 ] && echo -e "$cl_name"$1"\e[0m"="$cl_value"${!1}"\e[0m"; }
+print_var SHELL
+print_var OSTYPE
+print_var git_ver
 cl_op=$blue
 cl_colons=$dkgray
 if [ "$HELP" = "YES" ]; then
@@ -115,6 +152,7 @@ if [ "$HELP" = "YES" ]; then
   echo "      "It is case insensitive, and ignores the final "'B'" or "'b'" if present.
   exit 0
 fi
+if [ -v __error ]; then exit 11; fi
 function convert_to_bytes {
 __sz="$1"
 if ! [[ "$__sz" =~ ^[0-9]+([KMGTEkmgte])?([Bb])?$ ]]; then return 1; fi
@@ -266,7 +304,6 @@ dst_dir="$(sed 's \\ \/ g' <<< "$arg_4")"
 fi
 declare -x src_dir
 declare -x dst_dir
-print_var () { local cl_name="\e[38;5;146m" cl_value="\e[38;5;186m"; [ -v $1 ] && echo -e "$cl_name"$1"\e[0m"="$cl_value"${!1}"\e[0m"; }
 if [ "$NOINFO" = "NO" ]; then
 print_var src_branch
 print_var src_dir
@@ -324,6 +361,9 @@ if [ "$DEL" = "YES" ] && [ "$ZIP" = "YES" ]; then
 >&2 echo -e "\e[91m""Invalid usage, --del or -d is not compatible with --zip or -z""\e[0m"
 exit 1
 fi
+if [ "$ZIP" = "YES" ] && [ "$COPY" = "NO" ] && [ "$src_branch" = "$dst_branch" ]; then
+>&2 echo -e "$red""Warning: "$dkyellow"zip does nothing when moving inside a single branch""\e[0m"
+fi
 if [ "$DEL" = "YES" ] && [ ! -z "$dst_branch" ]; then
 >&2 echo -e "\e[91m""Invalid usage, destination branch must be empty when using --del or -d""\e[0m"
 exit 1
@@ -379,7 +419,7 @@ else
 TEST_SELECTED="1"
 fi
 if [ $TEST_REMOVE -ne $TEST_SELECTED ]; then
-if [ "$1" = "-m" ]; then
+if [ "$1" = "-m" ] || [ "$1" = "-s" ]; then
 if [ "$src_dir" != "$dst_dir" ]; then
 if [ -z "$src_dir" ]
 then path=`sed -E 's|^("?)|\1'"$dst_dir"'/|g' <<< "$path"`
@@ -390,8 +430,10 @@ fi
 fi
 fi
 printf "$mode $sha $stage\t$path\n"
-else
+elif [ "$1" != "-s" ]; then
 __rm_files+=("$path")
+else
+printf "$mode $sha $stage\t$path\n"
 fi
 done <<< "$(git ls-files --stage)"
 if [ ${#__rm_files[@]} -gt 0 ]; then
@@ -399,6 +441,13 @@ git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}" > /dev/null 2>&1
 fi
 }
 declare -fx filter_ls_files
+function index_filter {
+local _PATHS=`filter_ls_files $1`
+if [ -z "$_PATHS" ]; then return; fi
+echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --remove --index-info
+if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
+}
+declare -fx index_filter
 function indent_prepend {
 local tab=$(echo -e '\t') IFS= line= trimmed= nocolors=
 while read line; do
@@ -416,15 +465,21 @@ echo "$tab$line"
 done
 }
 declare -fx indent_prepend
+if [ "$DEL" = "NO" ]; then
+if [ "$src_branch" != "$dst_branch" ] || [ "$COPY" = "YES" ]; then
 NEW_UUID="$(cat /dev/urandom | tr -dc '0-9A-F' | fold -w 32 | head -n 1)"
 tmp_branch="_temp_$NEW_UUID"
-if [ "$DEL" = "NO" ]; then
 __git branch $tmp_branch $src_branch
 fi
+fi
 if [ "$COPY" = "NO" ]; then
-if [ "$_has_filter" = 1 ]; then
+if [ "$DEL" = "NO" ] && [ "$src_branch" = "$dst_branch" ]; then
 __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-filter_ls_files -r | indent_prepend
+index_filter -s | indent_prepend
+' -- "$src_branch"
+elif [ "$_has_filter" = 1 ]; then
+__git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+index_filter -r | indent_prepend
 ' -- "$src_branch"
 elif [ -z "$src_dir" ]; then
 __git branch -D "$src_branch"
@@ -437,7 +492,7 @@ git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"' | ind
 fi
 __git update-ref -d refs/original/refs/heads/"$src_branch"
 fi
-if [ "$DEL" = "YES" ]; then
+if [ ! -v tmp_branch ]; then
 exit 0
 fi
 if [ -z "$dst_dir" ] && [ "$_has_filter" = "0" ]; then
@@ -446,15 +501,9 @@ __git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$
 __git update-ref -d refs/original/refs/heads/"$tmp_branch"
 fi
 else
-function filter_to_move {
-local _PATHS=`filter_ls_files -m`
-if [ -z "$_PATHS" ]; then return; fi
-echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --remove --index-info
-if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
-}
 declare -fx filter_to_move
 __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-filter_to_move | indent_prepend
+index_filter -m | indent_prepend
 ' -- "$tmp_branch"
 fi
 __git update-ref -d refs/original/refs/heads/"$tmp_branch"
