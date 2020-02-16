@@ -1,6 +1,8 @@
 #!/bin/bash
 ver=v0.3.6
 
+# TODO: use git-filter-repo if installed - https://github.com/newren/git-filter-repo
+
 # argument variables
 ZIP=NO
 COPY=NO
@@ -308,16 +310,18 @@ declare -x F_MIN_SIZE F_MAX_SIZE
 # git command alternative that intercept the commands and displays them before executing
 function __git {
   local _all_args=
+  local line=$1
+  shift
   for i in "$@"
   do
     _all_args="$_all_args $(quote_arg "$i")"
   done
   if [ "$SIMULATE" = "YES" ]
   then
-    echo $blue"git"$yellow"$_all_args"$cdef
+    echo $dkgreen"line "$line": "$blue"git"$yellow"$_all_args"$cdef
   else
     if [ "$NOINFO" = "NO" ]; then
-      echo $blue"git"$yellow"$_all_args"$cdef
+      echo $dkgreen"line "$line": "$blue"git"$yellow"$_all_args"$cdef
     fi
     eval git$_all_args
   fi
@@ -655,7 +659,7 @@ if [ "$DEL" = "NO" ]; then
     # - not moving files inside a branch
     NEW_UUID="$(cat /dev/urandom | tr -dc '0-9A-F' | fold -w 32 | head -n 1)"
     tmp_branch="_temp_$NEW_UUID"
-    __git branch $tmp_branch $src_branch
+    __git $LINENO branch $tmp_branch $src_branch
   fi
 fi
 
@@ -664,27 +668,27 @@ fi
 if [ "$COPY" = "NO" ]; then
   if [ "$DEL" = "NO" ] && [ "$src_branch" = "$dst_branch" ]; then
     # if moving inside a single branch, do it at once
-    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+    __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
     index_filter -s | indent_prepend
     ' -- "$src_branch"
   elif [ "$_has_filter" = 1 ]; then
     # if there are filters, then we need to remove file by file
-    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+    __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
     index_filter -r | indent_prepend
     ' -- "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
-    __git branch -D "$src_branch"
+    __git $LINENO branch -D "$src_branch"
     ZIP=
     if [ "$dst_branch" = "$src_branch" ]; then unset -v dst_branch_existed; fi
   else
     # removing source directory from the source branch
-    __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+    __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
       git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"' | indent_prepend
       ' -- "$src_branch"
   fi
   # deleting 'original' branches (git creates these as backups)
-  __git update-ref -d refs/original/refs/heads/"$src_branch"
+  __git $LINENO update-ref -d refs/original/refs/heads/"$src_branch"
 fi
 
 # if we are only deleting something or moving inside a branch, then we are done
@@ -695,18 +699,18 @@ fi
 if [ -z "$dst_dir" ] && [ "$_has_filter" = "0" ]; then
   # moving subdirectory to root with --subdirectory-filter
   if [ ! -z "$src_dir" ]; then
-    __git filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- "$tmp_branch"
+    __git $LINENO filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- "$tmp_branch"
     # deleting 'original' branches (git creates these as backups)
-    __git update-ref -d refs/original/refs/heads/"$tmp_branch"
+    __git $LINENO update-ref -d refs/original/refs/heads/"$tmp_branch"
   fi
 else
   declare -fx filter_to_move
-  __git filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
+  __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
     index_filter -m | indent_prepend
     ' -- "$tmp_branch"
 fi
 # deleting 'original' branches (git creates these as backups)
-__git update-ref -d refs/original/refs/heads/"$tmp_branch"
+__git $LINENO update-ref -d refs/original/refs/heads/"$tmp_branch"
 
 # getting commit hashes and datetimes
 unset -v rebase_hash
@@ -734,26 +738,26 @@ fi
 # it is a requirement of the merge command
 if [ -v dst_branch_existed ]
 then
-  __git checkout "$dst_branch"
+  __git $LINENO checkout "$dst_branch"
   declare _cur_branch=
   _cur_branch=`git branch --show-current`
   echo Current branch is: $_cur_branch
-  __git merge --allow-unrelated-histories --no-edit -s recursive -X no-renames -X theirs --no-commit "$tmp_branch";
-  # __git reset HEAD
-  # __git add --ignore-removal .
-  # __git checkout -- .
+  __git $LINENO merge --allow-unrelated-histories --no-edit -s recursive -X no-renames -X theirs --no-commit "$tmp_branch";
+  # __git $LINENO reset HEAD
+  # __git $LINENO add --ignore-removal .
+  # __git $LINENO checkout -- .
   # TODO: better commit messages:
   # - when copying, moving or deleting, it should be clear what was the operation
-  __git commit -m "Merge branch '$src_branch' into '$dst_branch'"
+  __git $LINENO commit -m "Merge branch '$src_branch' into '$dst_branch'"
 else
   #git checkout --orphan "$dst_branch"
   #git rm -r .
   ##git rm -rf .
-  if ! __git branch "$dst_branch" "$tmp_branch"
+  if ! __git $LINENO branch "$dst_branch" "$tmp_branch"
   then
     exit 1
   fi
-  __git checkout "$dst_branch"
+  __git $LINENO checkout "$dst_branch"
 fi
 
 # zipping timelines:
@@ -768,4 +772,4 @@ if [ -v rebase_hash ]; then
 fi
 
 # deleting _temp branch
-__git branch -D "$tmp_branch"
+__git $LINENO branch -D "$tmp_branch"

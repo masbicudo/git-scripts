@@ -276,7 +276,7 @@ if [ ! -z "$BUILD_PATH" ] && [ "$BUILD_PATH" != "." ] && [ "$BUILD_PATH" != ".."
     [ ! -d "$_dir" ] && mkdir "$_dir"
     echo "$_file"
     # ref: http://www.nongnu.org/bibledit/sed_rules_reference.html#addressesandrangesoftext
-    sed -r '
+    cat "$f" | awk '{gsub("\\$LINENO",NR,$0);print}' | sed -r '
     /#BEGIN_DEBUG/,/#END_DEBUG/d;
     /#BEGIN_AS_IS/,/#END_AS_IS/!{
       2,${/^ *debug/d};
@@ -286,7 +286,7 @@ if [ ! -z "$BUILD_PATH" ] && [ "$BUILD_PATH" != "." ] && [ "$BUILD_PATH" != ".."
       /^ver=/ s/$/"'"$ver_append"'"/
     };
     2,${/^ *#(BEGIN|END)_AS_IS\b.*$/d
-    }' "$f" > "$_file"
+    }' > "$_file"
   done
 fi | sed "2,$ s/^/  /"
 
