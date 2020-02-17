@@ -310,18 +310,21 @@ declare -x F_MIN_SIZE F_MAX_SIZE
 # git command alternative that intercept the commands and displays them before executing
 function __git {
   local _all_args=
-  local line=$1
-  shift
+  local line=
+  if [[ $1 =~ ^[0-9]+$ ]]; then
+    line=$dkgreen"line "$1": "
+    shift
+  fi
   for i in "$@"
   do
     _all_args="$_all_args $(quote_arg "$i")"
   done
   if [ "$SIMULATE" = "YES" ]
   then
-    echo $dkgreen"line "$line": "$blue"git"$yellow"$_all_args"$cdef
+    echo $line""$blue"git"$yellow"$_all_args"$cdef
   else
     if [ "$NOINFO" = "NO" ]; then
-      echo $dkgreen"line "$line": "$blue"git"$yellow"$_all_args"$cdef
+      echo $line""$blue"git"$yellow"$_all_args"$cdef
     fi
     eval git$_all_args
   fi
@@ -374,8 +377,9 @@ if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
   then
     dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
     dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
+    dst_branch_exists=0
   else
-    dst_branch_existed=1
+    dst_branch_exists=1
   fi
 
 elif [ -v "arg_3" ] && [ ! -v "arg_4" ]; then
@@ -680,7 +684,7 @@ if [ "$COPY" = "NO" ]; then
     # removing the branch, since source directory is the root
     __git $LINENO branch -D "$src_branch"
     ZIP=
-    if [ "$dst_branch" = "$src_branch" ]; then unset -v dst_branch_existed; fi
+    if [ "$dst_branch" = "$src_branch" ]; then dst_branch_exists=0; fi
   else
     # removing source directory from the source branch
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
@@ -713,8 +717,14 @@ fi
 __git $LINENO update-ref -d refs/original/refs/heads/"$tmp_branch"
 
 # getting commit hashes and datetimes
+
+if [ ! -v dst_branch_exists ]; then
+  ! __git $LINENO show-ref --verify --quiet refs/heads/"$dst_branch"
+  dst_branch_exists=$?
+fi
+
 unset -v rebase_hash
-if [ -v dst_branch_existed ]; then
+if [ "$dst_branch_exists" = 1 ]; then
   declare commit1=0 datetime1=0 commit2=0 datetime2=0
   if [ "$SIMULATE" = "NO" ]; then
     #cannot simulate these commands
@@ -736,7 +746,7 @@ fi
 
 # need to checkout because merge may result in conficts
 # it is a requirement of the merge command
-if [ -v dst_branch_existed ]
+if [ "$dst_branch_exists" = 1 ]
 then
   __git $LINENO checkout "$dst_branch"
   declare _cur_branch=
