@@ -16,6 +16,7 @@ do
     --help|-h|\/\?|\?)    HELP="1"  ;shift;;
     --release|-r)         RELEASE_MSG="$2"  ;shift;;
     --install|-i)         INSTALL_PATH="$2" ;shift;;
+    --debug|-d)           IS_DEBUG="1" ;;
     --path|-p)            BUILD_PATH="$2"   ;shift;;
     --save-branch|-sb|--load-branch|-lb)
       if [[ $i =~ --save-branch|-sb ]]
@@ -190,6 +191,7 @@ if [ -v USE_SETTINGS ]; then
     truncate -s 0 "$SETTINGS_PATH"
     if [ -v BUILD_PATH ]; then echo "BUILD_PATH=$BUILD_PATH" >> "$SETTINGS_PATH" ; fi
     if [ -v INSTALL_PATH ]; then echo "INSTALL_PATH=$INSTALL_PATH" >> "$SETTINGS_PATH" ; fi
+    if [ -v IS_DEBUG ]; then echo "IS_DEBUG=$IS_DEBUG" >> "$SETTINGS_PATH" ; fi
     if [ -v SETTINGS_BRANCH ]; then
       __git reset
       __git add -f "$SETTINGS_PATH"
@@ -203,7 +205,7 @@ if [ -v USE_SETTINGS ]; then
     do
       [ ! -v "$var_name" ] && declare "$var_name"="$var_value"
     done <<< "$(sed -r '
-      /^(BUILD_PATH|INSTALL_PATH)=(.*)$/!d;
+      /^(BUILD_PATH|INSTALL_PATH|IS_DEBUG)=(.*)$/!d;
       s/=/ /;
       ' "$SETTINGS_PATH")"
   fi
@@ -228,6 +230,7 @@ print_var BRANCH
 print_var BUILD_PATH
 print_var INSTALL_PATH
 print_var RELEASE_MSG
+print_var IS_DEBUG
 
 if [ "$INSTALL_PATH" = "/" ]; then
   >&2 echo -e "\e[91m"Cannot install to the root"$cdef"
@@ -275,18 +278,29 @@ if [ ! -z "$BUILD_PATH" ] && [ "$BUILD_PATH" != "." ] && [ "$BUILD_PATH" != ".."
     _dir=`dirname "$_file"`
     [ ! -d "$_dir" ] && mkdir "$_dir"
     echo "$_file"
-    # ref: http://www.nongnu.org/bibledit/sed_rules_reference.html#addressesandrangesoftext
-    cat "$f" | awk '{gsub("\\$LINENO",NR,$0);print}' | sed -r '
-    /#BEGIN_DEBUG/,/#END_DEBUG/d;
-    /#BEGIN_AS_IS/,/#END_AS_IS/!{
-      2,${/^ *debug/d};
-      2,${/^ *#.*$/d};
-      /^ *$/d;
-      s/^ *//;
-      /^ver=/ s/$/"'"$ver_append"'"/
-    };
-    2,${/^ *#(BEGIN|END)_AS_IS\b.*$/d
-    }' > "$_file"
+    if [ ! -v IS_DEBUG ]; then
+      # ref: http://www.nongnu.org/bibledit/sed_rules_reference.html#addressesandrangesoftext
+      cat "$f" | awk '{gsub("\\$LINENO",NR,$0);print}' | sed -r '
+      /#BEGIN_DEBUG/,/#END_DEBUG/d;
+      /#BEGIN_AS_IS/,/#END_AS_IS/!{
+        2,${/^ *debug/d};
+        2,${/^ *#.*$/d};
+        /^ *$/d;
+        s/^ *//;
+        /^ver=/ s/$/"'"$ver_append"'"/
+      };
+      2,${/^ *#(BEGIN|END)_AS_IS\b.*$/d
+      }' > "$_file"
+    else
+      # ref: http://www.nongnu.org/bibledit/sed_rules_reference.html#addressesandrangesoftext
+      cat "$f" | awk '{gsub("\\$LINENO",NR,$0);print}' | sed -r '
+      /#BEGIN_AS_IS/,/#END_AS_IS/!{
+        2,${/^ *#.*$/d};
+        /^ *$/d;
+        s/^ *//;
+        /^ver=/ s/$/"'"$ver_append"'"/
+      }' > "$_file"
+    fi
   done
 fi | sed "2,$ s/^/  /"
 
