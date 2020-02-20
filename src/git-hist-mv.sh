@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=v0.3.6
+ver=v0.3.7
 
 # TODO: use git-filter-repo if installed - https://github.com/newren/git-filter-repo
 
@@ -77,11 +77,19 @@ if [ "$*" = "" ]; then
   # if there are no arguments, then show help
   HELP=YES
 fi
+declare PARSE_COMMITS
+unset -v PARSE_COMMITS
 argc=0
+commits=()
 while [[ $# -gt 0 ]]
 do
   i="$1"
   all_args="$all_args $(quote_arg "$1")"
+  if [ -v PARSE_COMMITS ]; then
+    commits+=("$i")
+    shift
+    continue
+  fi
   case $i in
     --path|-p)            F_PATH="$2"     ;all_args="$all_args $(quote_arg "$2")";shift;;
     --file-name|-fn)      F_FNAME="$2"    ;all_args="$all_args $(quote_arg "$2")";shift;;
@@ -94,6 +102,7 @@ do
     --simulate|--sim|-s)  SIMULATE=YES  ;;
     --help|-h)            HELP=YES      ;;
     --noinfo)             NOINFO=YES    ;;
+    --)                   PARSE_COMMITS="1";;
     *)
     ((argc=argc+1))
     eval "arg_$argc='${i//\'/\'\"\'\"\'}'"
@@ -674,12 +683,12 @@ if [ "$COPY" = "NO" ]; then
     # if moving inside a single branch, do it at once
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
     index_filter -s | indent_prepend
-    ' -- "$src_branch"
+    ' -- "${commits[@]}" "$src_branch"
   elif [ "$_has_filter" = 1 ]; then
     # if there are filters, then we need to remove file by file
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
     index_filter -r | indent_prepend
-    ' -- "$src_branch"
+    ' -- "${commits[@]}" "$src_branch"
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
     __git $LINENO branch -D "$src_branch"
@@ -689,7 +698,7 @@ if [ "$COPY" = "NO" ]; then
     # removing source directory from the source branch
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
       git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"' | indent_prepend
-      ' -- "$src_branch"
+      ' -- "${commits[@]}" "$src_branch"
   fi
   # deleting 'original' branches (git creates these as backups)
   __git $LINENO update-ref -d refs/original/refs/heads/"$src_branch"
@@ -703,7 +712,7 @@ fi
 if [ -z "$dst_dir" ] && [ "$_has_filter" = "0" ]; then
   # moving subdirectory to root with --subdirectory-filter
   if [ ! -z "$src_dir" ]; then
-    __git $LINENO filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- "$tmp_branch"
+    __git $LINENO filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- "${commits[@]}" "$tmp_branch"
     # deleting 'original' branches (git creates these as backups)
     __git $LINENO update-ref -d refs/original/refs/heads/"$tmp_branch"
   fi
@@ -711,7 +720,7 @@ else
   declare -fx filter_to_move
   __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
     index_filter -m | indent_prepend
-    ' -- "$tmp_branch"
+    ' -- "${commits[@]}" "$tmp_branch"
 fi
 # deleting 'original' branches (git creates these as backups)
 __git $LINENO update-ref -d refs/original/refs/heads/"$tmp_branch"
