@@ -369,12 +369,16 @@ function get_branch_and_dir {
 
 if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
   debug arg_3 and arg_4 are empty
+  debug DEL=$DEL
+  debug arg_1=$arg_1
   unset -v src_branch src_dir
   { IFS= read -r src_branch && IFS= read -r src_dir; } <<< `get_branch_and_dir "$arg_1"`
-  unset -v dst_branch dst_dir
-  { IFS= read -r dst_branch && IFS= read -r dst_dir; } <<< `get_branch_and_dir "$arg_2"`
+  if [ "$DEL" = "NO" ]; then
+    unset -v dst_branch dst_dir
+    { IFS= read -r dst_branch && IFS= read -r dst_dir; } <<< `get_branch_and_dir "$arg_2"`
+  fi
 
-  debug dst_branch=$dst_branch
+  #debug dst_branch=$dst_branch
 
   if [ -z "$src_branch" ]
   then
@@ -382,13 +386,15 @@ if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
     exit 1
   fi
   source_branch_existed=1
-  if [ -z "$dst_branch" ]
-  then
-    dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
-    dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
-    dst_branch_exists=0
-  else
-    dst_branch_exists=1
+  if [ "$DEL" = "NO" ]; then
+    if [ -z "$dst_branch" ]
+    then
+      dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
+      dst_dir="$(sed 's \\ \/ g; s ^[^/]*\(/\|$\)  g' <<< "$arg_2")"
+      dst_branch_exists=0
+    else
+      dst_branch_exists=1
+    fi
   fi
 
 elif [ -v "arg_3" ] && [ ! -v "arg_4" ]; then
