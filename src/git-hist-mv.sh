@@ -102,6 +102,7 @@ do
     --simulate|--sim|-s)  SIMULATE=YES  ;;
     --help|-h)            HELP=YES      ;;
     --noinfo)             NOINFO=YES    ;;
+    --reparent|-rp        REPARENT="$2"   ;all_args="$all_args $(quote_arg "$2")";shift;;
     --)                   PARSE_COMMITS="1";;
     *)
     ((argc=argc+1))
@@ -538,6 +539,32 @@ function is_file_selected {
 }
 declare -fx is_file_selected
 
+function current_reparent_id {
+  # $1 is the commit hash
+  git write-tree
+  git show -s --format=%B $1
+}
+declare -fx commit_reparent_id
+
+function commit_reparent_id {
+  # $1 is the commit hash
+  git rev-parse $1^{tree}
+  git show -s --format=%B $1
+}
+declare -fx commit_reparent_id
+
+declare -ax _map_reparent
+function create_reparent_dict {
+  while read commithash
+  do
+    read -a array <<< "$(commit_reparent_id $commithash | sha1sum)"
+    _map_reparent[${array[0]}]=$commithash
+  done <<< "$(git rev-list --all)"
+}
+declare -fx create_reparent_dict
+
+declare -x reparent_source reparent_target
+
 function filter_ls_files {
   debug_file "  ## filter_ls_files $1"
   debug_file "    _has_filter=$_has_filter"
@@ -604,9 +631,25 @@ function filter_ls_files {
     debug_file "    ${__rm_files[@]}"
     git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}" > /dev/null 2>&1
   fi
+  
+  # looking for another commit that happens to be equal to this one
+  if [ -v REPARENT ]; then
+    local _current_id _target_commit array
+    read -a array <<< "$(current_reparent_id $GIT_COMMIT | sha1sum)"
+    _current_id=${array[0]}
+    _target_commit=${_map_reparent[$_current_id]}
+    if [ ! -z "$_target_commit" ]; then
+      # if a corresponding target commit is found then we must stop all
+      # rewriting, saving the value of the target commit. It will be used latter
+      # in a filter-branch/parent-filter command, to replace the parent.
+      reparent_source=$GIT_COMMIT
+      reparent_target=$_target_commit
+    fi
+  fi
 }
 declare -fx filter_ls_files
 function index_filter {
+  if [ ! -z "$reparent_source" ]; then return; fi
   # using filter-branch/index-filter, update-index/index-info and rm/cached to move and delete files
   # - filter-branch/index-filter iterates each commit without checking out each commit
   # - update-index/index-info changes multiple file pathes in a commit
