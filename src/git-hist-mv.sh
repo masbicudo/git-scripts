@@ -104,7 +104,11 @@ do
     --simulate|--sim|-s)  SIMULATE=YES  ;;
     --help|-h)            HELP=YES      ;;
     --noinfo)             NOINFO=YES    ;;
-    --reparent|-rp)       REPARENT="$2"   ;all_args="$all_args $(quote_arg "$2")";shift;;
+    --reparent|-rp)
+      if [ ! -z "$2" ] && ! [[ "$2" =~ ^- ]]; then
+        REPARENT="$2";all_args="$all_args $(quote_arg "$2")"; shift;
+      else REPARENT="mt"; fi
+      ;;
     --)                   PARSE_COMMITS="1";;
     *)
     ((argc=argc+1))
@@ -348,6 +352,15 @@ function proc_f_fname {
   return 0
 }
 
+# reparent options
+if [ -v REPARENT ]; then
+  ! [[ $REPARENT =~ m ]]
+  R_EQ_MSG=$?
+  ! [[ $REPARENT =~ t ]]
+  R_EQ_TREE=$?
+  declare -x R_EQ_MSG R_EQ_TREE
+fi
+
 # normalizing filters and their options
 # TODO: support multiple filters of the same type, doing an 'AND' operation between them
 if [ -v F_FNAME ]; then read -r F_FNAME_NOT F_FNAME_CI F_FNAME <<< "$(proc_f_fname "$F_FNAME")"; fi
@@ -585,15 +598,15 @@ declare -fx is_file_selected
 
 function current_reparent_id {
   # $1 is the commit hash
-  git write-tree
-  git show -s --format=%B $1
+  [ "$R_EQ_TREE" = 1 ] && git write-tree
+  [ "$R_EQ_MSG" = 1 ] &&  git show -s --format=%B $1
 }
 declare -fx commit_reparent_id
 
 function commit_reparent_id {
   # $1 is the commit hash
-  git rev-parse $1^{tree}
-  git show -s --format=%B $1
+  [ "$R_EQ_TREE" = 1 ] && git rev-parse $1^{tree}
+  [ "$R_EQ_MSG" = 1 ] &&  git show -s --format=%B $1
 }
 declare -fx commit_reparent_id
 
@@ -602,11 +615,14 @@ function create_reparent_dict {
   while read commithash
   do
     read -a array <<< "$(commit_reparent_id $commithash | sha1sum)"
-    _map_reparent[${array[0]}]=$commithash
+    debug _map_reparent[h"${array[0]}"]="$commithash"
+    _map_reparent[h"${array[0]}"]="$commithash"
   done <<< "$(git rev-list --all)"
 }
 declare -fx create_reparent_dict
 
+create_reparent_dict
+exit 0
 declare -x reparent_source reparent_target
 
 function filter_ls_files {
@@ -681,7 +697,7 @@ function filter_ls_files {
     local _current_id _target_commit array
     read -a array <<< "$(current_reparent_id $GIT_COMMIT | sha1sum)"
     _current_id=${array[0]}
-    _target_commit=${_map_reparent[$_current_id]}
+    _target_commit=${_map_reparent[h$_current_id]}
       "    _current_id=$_current_id _target_commit=$_target_commit"
     if [ ! -z "$_target_commit" ]; then
       # if a corresponding target commit is found then we must stop all
