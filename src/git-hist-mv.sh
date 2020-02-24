@@ -139,14 +139,14 @@ if [ "$HELP" = "NO" ]; then
     >&2 echo $red"git is not installed"$cdef
     __error=1
   fi
-  git_ver=$(git --version)
-  git_ver_SEP=$(echo "$git_ver" | sed 's/[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*/_SEPARATOR_/')
-  git_ver_s=$(echo "$git_ver_SEP" | sed 's/_SEPARATOR_.*$//')
-  git_ver_e=$(echo "$git_ver_SEP" | sed 's/^.*_SEPARATOR_//')
-  git_ver=${git_ver#"$git_ver_s"}
-  git_ver=${git_ver%"$git_ver_e"}
+  git_ver="$(git --version)"
+  git_ver_SEP="$(echo "$git_ver" | sed 's/[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*/_SEPARATOR_/')"
+  git_ver_s="$(echo "$git_ver_SEP" | sed 's/_SEPARATOR_.*$//')"
+  git_ver_e="$(echo "$git_ver_SEP" | sed 's/^.*_SEPARATOR_//')"
+  git_ver="${git_ver#"$git_ver_s"}"
+  git_ver="${git_ver%"$git_ver_e"}"
   min_supported_git_ver=2.23.0
-  read min_git_ver <<< $(echo "$min_supported_git_ver
+  read min_git_ver <<< "$(echo "$min_supported_git_ver"
 $git_ver" | sort -t '.' -k 1,1 -k 2,2 -k 3,3 -k 4,4)
   if [ "$min_git_ver" = "$git_ver" ] && [ "$min_git_ver" != "$min_supported_git_ver" ]; then
     >&2 echo $red"Error: minimum supported git version is $min_supported_git_ver"$cdef
@@ -276,8 +276,8 @@ function convert_to_bytes {
   #   10gB -> 10240000000
   __sz="$1"
   if ! [[ "$__sz" =~ ^[0-9]+([KMGTEkmgte])?([Bb])?$ ]]; then return 1; fi
-  __un=$(echo $__sz | sed -r 's ^[0-9]+([KMGTE])?B?$ \1 gI')
-  __sz=$(echo $__sz | sed -r 's ^([0-9]+)[KMGTE]?B?$ \1 gI')
+  __un="$(echo $__sz | sed -r 's ^[0-9]+([KMGTE])?B?$ \1 gI')"
+  __sz="$(echo $__sz | sed -r 's ^([0-9]+)[KMGTE]?B?$ \1 gI')"
   if   [ "${__un^^}" = "K" ]; then let "__sz=$__sz*1024";
   elif [ "${__un^^}" = "M" ]; then let "__sz=$__sz*1024000";
   elif [ "${__un^^}" = "G" ]; then let "__sz=$__sz*1024000000";
@@ -402,25 +402,25 @@ function get_branch_and_dir {
   # This will print two lines, the 1st is the branch name, the 2nd is the path.
   # If the branch does not exist in the repository, then branch and path
   # are returned empty.
-  arg_1=$(sed 's \\ / g' <<< "$1")
+  arg_1="$(sed 's \\ / g' <<< "$1")"
 
-  branch=$(
+  branch="$(
     git for-each-ref refs/heads --format='%(refname)' | sed 's refs/heads/  g' | while read x
     do
-      arg_1=$(sed 's /*$ / g' <<< "$arg_1")
-      arg_1_split=$(sed 's ^'"$x"'/  g' <<< "$arg_1")
+      arg_1="$(sed 's /*$ / g' <<< "$arg_1")"
+      arg_1_split="$(sed 's ^'"$x"'/  g' <<< "$arg_1")"
       if [ "$arg_1" != "$arg_1_split" ]
       then
         echo $x
         break
       fi
     done
-  )
+  )"
   echo "$branch"
 
   inner_path=
   if [ ! -z "$branch" ]; then
-    inner_path=`sed 's ^'"$branch"'/\?  g' <<< "$arg_1"`
+    inner_path="$(sed 's ^'"$branch"'/\?  g' <<< "$arg_1")"
   fi
   echo "$inner_path"
 }
@@ -430,10 +430,10 @@ if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
   debug DEL=$DEL
   debug arg_1=$arg_1
   unset -v src_branch src_dir
-  { IFS= read -r src_branch && IFS= read -r src_dir; } <<< `get_branch_and_dir "$arg_1"`
+  { IFS= read -r src_branch && IFS= read -r src_dir; } <<< "$(get_branch_and_dir "$arg_1")"
   if [ "$DEL" = "NO" ]; then
     unset -v dst_branch dst_dir
-    { IFS= read -r dst_branch && IFS= read -r dst_dir; } <<< `get_branch_and_dir "$arg_2"`
+    { IFS= read -r dst_branch && IFS= read -r dst_dir; } <<< "$(get_branch_and_dir "$arg_2")"
   fi
 
   #debug dst_branch=$dst_branch
@@ -562,7 +562,7 @@ function is_file_selected {
   
   # filtering by directory
   if [ -v F_DIR ]; then
-    local directory=$(dirname "$_path")
+    local directory="$(dirname "$_path")"
     local _ci=""
     if [ "$F_DIR_CI" = "1" ]; then _ci="I"; fi
     if [ "$directory" = "." ]; then directory=""; fi
@@ -574,7 +574,7 @@ function is_file_selected {
   
   # filtering by name
   if [ -v F_FNAME ]; then
-    local fname=$(basename "$_path")
+    local fname="$(basename "$_path")"
     local _ci=""
     if [ "$F_FNAME_CI" = "1" ]; then _ci="I"; fi
     debug_file "        fname=$fname"
@@ -585,7 +585,7 @@ function is_file_selected {
   
   # filtering by size
   if [ -v F_MIN_SIZE ] || [ -v F_MAX_SIZE ]; then
-    local objsize=$(git cat-file -s "$GIT_COMMIT:$_path")
+    local objsize="$(git cat-file -s "$GIT_COMMIT:$_path")"
     debug_file "        objsize=$objsize"
     if [ -v F_MIN_SIZE ] && [ $objsize -lt $F_MIN_SIZE ]; then return 1; fi
     if [ -v F_MAX_SIZE ] && [ $objsize -gt $F_MAX_SIZE ]; then return 1; fi
@@ -622,7 +622,7 @@ function create_reparent_dict {
 declare -fx create_reparent_dict
 
 create_reparent_dict
-exit 0
+
 declare -x reparent_source reparent_target
 
 function filter_ls_files {
@@ -669,10 +669,10 @@ function filter_ls_files {
         # see: /kb/path_pattern.sh
         if [ "$src_dir" != "$dst_dir" ]; then
           if [ -z "$src_dir" ]
-          then path=`sed -E 's|^("?)|\1'"$dst_dir"'/|g' <<< "$path"`
+          then path="$(sed -E 's|^("?)|\1'"$dst_dir"'/|g' <<< "$path")"
           elif [ -z "$dst_dir" ]
-          then path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|("\|$))|\1\3|g' <<< "$path"`
-          else path=`sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path"`
+          then path="$(sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|("\|$))|\1\3|g' <<< "$path")"
+          else path="$(sed -E 's|^("?)'"${src_dir/\./\\.}"'(/\|"\|$)|\1'"$dst_dir"'\2|g' <<< "$path")"
           fi
         fi
       fi
@@ -687,7 +687,7 @@ function filter_ls_files {
     fi
   done <<< "$(git ls-files --stage)"
 
-  if [ ${#__rm_files[@]} -gt 0 ]; then
+  if [ "${#__rm_files[@]}" -gt 0 ]; then
     debug_file "    ${__rm_files[@]}"
     git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}" > /dev/null 2>&1
   fi
@@ -696,8 +696,8 @@ function filter_ls_files {
   if [ -v REPARENT ]; then
     local _current_id _target_commit array
     read -a array <<< "$(current_reparent_id $GIT_COMMIT | sha1sum)"
-    _current_id=${array[0]}
-    _target_commit=${_map_reparent[h$_current_id]}
+    _current_id="${array[0]}"
+    _target_commit="${_map_reparent[h$_current_id]}"
       "    _current_id=$_current_id _target_commit=$_target_commit"
     if [ ! -z "$_target_commit" ]; then
       # if a corresponding target commit is found then we must stop all
@@ -724,7 +724,7 @@ function index_filter {
   debug "GIT_COMMIT=$GIT_COMMIT"
   debug "src_dir=$src_dir"
   debug "dst_dir=$dst_dir"
-  local _PATHS=`filter_ls_files $1`
+  local _PATHS="$(filter_ls_files $1)"
   debug "$_PATHS"
   if [ -z "$_PATHS" ]; then return; fi
   # ref: https://unix.stackexchange.com/questions/358850/what-are-all-the-ways-to-create-a-subshell-in-bash
@@ -735,10 +735,10 @@ function index_filter {
 declare -fx index_filter
 
 function indent_prepend {
-  local tab=$(echo -e '\t') IFS= line= trimmed= nocolors=
+  local tab="$(echo -e '\t')" IFS= line= trimmed= nocolors=
   while read line; do
-    trimmed=`sed -E 's/[[:blank:]]+//g' <<< "${line}"`
-    nocolors=`sed 's/\x1B\[[0-9;]\+[A-Za-z]//g;s/\x0f//g' <<< "${trimmed}"`
+    trimmed="$(sed -E 's/[[:blank:]]+//g' <<< "${line}")"
+    nocolors="$(sed 's/\x1B\[[0-9;]\+[A-Za-z]//g;s/\x0f//g' <<< "${trimmed}")"
     if ! [[ -z "$nocolors" ]]; then break; fi
     echo -n "$trimmed"
   done
@@ -855,9 +855,9 @@ if [ "$dst_branch_exists" = 1 ]; then
   rebase_hash="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
   if [ "$datetime1" -gt 0 ] && [ "$datetime2" -gt 0 ]; then
     if [ "$datetime1" -gt "$datetime2" ]; then
-      rebase_hash=`git log --before $datetime1 --format="%H" -n 1 "$tmp_branch"`
+      rebase_hash="$(git log --before $datetime1 --format="%H" -n 1 "$tmp_branch")"
     else
-      rebase_hash=`git log --before $datetime2 --format="%H" -n 1 "$dst_branch"`
+      rebase_hash="$(git log --before $datetime2 --format="%H" -n 1 "$dst_branch")"
     fi
   fi
   debug "rebase_hash=$rebase_hash"
@@ -869,7 +869,7 @@ if [ "$dst_branch_exists" = 1 ]
 then
   __git $LINENO checkout "$dst_branch"
   declare _cur_branch=
-  _cur_branch=`git branch --show-current`
+  _cur_branch="$(git branch --show-current)"
   echo Current branch is: $_cur_branch
   __git $LINENO merge --allow-unrelated-histories --no-edit -s recursive -X no-renames -X theirs --no-commit "$tmp_branch";
   # __git $LINENO reset HEAD
