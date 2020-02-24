@@ -146,8 +146,8 @@ if [ "$HELP" = "NO" ]; then
   git_ver="${git_ver#"$git_ver_s"}"
   git_ver="${git_ver%"$git_ver_e"}"
   min_supported_git_ver=2.23.0
-  read min_git_ver <<< "$(echo "$min_supported_git_ver"
-$git_ver" | sort -t '.' -k 1,1 -k 2,2 -k 3,3 -k 4,4)
+  read min_git_ver <<< "$(echo "$min_supported_git_ver
+$git_ver" | sort -t '.' -k 1,1 -k 2,2 -k 3,3 -k 4,4)"
   if [ "$min_git_ver" = "$git_ver" ] && [ "$min_git_ver" != "$min_supported_git_ver" ]; then
     >&2 echo $red"Error: minimum supported git version is $min_supported_git_ver"$cdef
     __error=1
@@ -185,7 +185,6 @@ if [ "$HELP" = "YES" ]; then
   }
   /[[:blank:]]*>/!{
     s/\[([^]]*)\]/'$cl_op'['$dkyellow'\1'$cl_op']/g;
-    s/`([^`]*)`/'$dkgray'\1'$cdef'/g;
     s/^([[:blank:]]*)- ([^:]*):/\1'$cl_op'- '$dkyellow'\2'$cl_colons':'$white'/g;
     /^[[:blank:]]*--?[[:alnum:]][[:alnum:]]*/ {
       s/ or (--?[[:alnum:]][[:alnum:]]*)/'$blue' or '$yellow'\1/g;
