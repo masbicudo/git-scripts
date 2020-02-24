@@ -61,7 +61,7 @@ function quote_arg {
   # then: needs to be quoted
   if [[ ! "$1" =~ [[:blank:]] ]] && [ "${1//
 /}" = "$1" ] && [ ! -z "$1" ]
-  then echo "${1//\'/\"\'\"}"; 
+  then echo "${1//\'/\"\'\"}";
   else echo "'${1//\'/\'\"\'\"\'}'"
   fi
   return 0
@@ -610,20 +610,17 @@ function commit_reparent_id {
 }
 declare -fx commit_reparent_id
 
-declare -ax _map_reparent
-function create_reparent_dict {
+declare -ax map_reparent
+if [ -v REPARENT ]; then
+  declare temp_array=
   while read commithash
   do
-    read -a array <<< "$(commit_reparent_id $commithash | sha1sum)"
-    debug _map_reparent[h"${array[0]}"]="$commithash"
-    _map_reparent[h"${array[0]}"]="$commithash"
+    read -a temp_array <<< "$(commit_reparent_id $commithash | sha1sum)"
+    debug map_reparent[h"${temp_array[0]}"]="$commithash"
+    map_reparent[h"${temp_array[0]}"]="$commithash"
   done <<< "$(git rev-list --all)"
-}
-declare -fx create_reparent_dict
-
-create_reparent_dict
-
-declare -x reparent_source reparent_target
+  unset -v temp_array
+fi
 
 function filter_ls_files {
   debug_file "  ## filter_ls_files $1"
@@ -691,24 +688,9 @@ function filter_ls_files {
     debug_file "    ${__rm_files[@]}"
     git rm --cached --ignore-unmatch -r -f -- "${__rm_files[@]}" > /dev/null 2>&1
   fi
-  
-  # looking for another commit that happens to be equal to this one
-  if [ -v REPARENT ]; then
-    local _current_id _target_commit array
-    read -a array <<< "$(current_reparent_id $GIT_COMMIT | sha1sum)"
-    _current_id="${array[0]}"
-    _target_commit="${_map_reparent[h$_current_id]}"
-      "    _current_id=$_current_id _target_commit=$_target_commit"
-    if [ ! -z "$_target_commit" ]; then
-      # if a corresponding target commit is found then we must stop all
-      # rewriting, saving the value of the target commit. It will be used latter
-      # in a filter-branch/parent-filter command, to replace the parent.
-      reparent_source=$GIT_COMMIT
-      reparent_target=$_target_commit
-    fi
-  fi
 }
 declare -fx filter_ls_files
+declare -x reparent_source reparent_target
 function index_filter {
   if [ ! -z "$reparent_source" ]; then return; fi
   # using filter-branch/index-filter, update-index/index-info and rm/cached to move and delete files
@@ -726,13 +708,56 @@ function index_filter {
   debug "dst_dir=$dst_dir"
   local _PATHS="$(filter_ls_files $1)"
   debug "$_PATHS"
-  if [ -z "$_PATHS" ]; then return; fi
-  # ref: https://unix.stackexchange.com/questions/358850/what-are-all-the-ways-to-create-a-subshell-in-bash
-  # ref: https://unix.stackexchange.com/questions/153587/environment-variable-assignment-followed-by-command
-  echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --remove --index-info
-  if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
+
+  if [ ! -z "$_PATHS" ]; then
+    # ref: https://unix.stackexchange.com/questions/358850/what-are-all-the-ways-to-create-a-subshell-in-bash
+    # ref: https://unix.stackexchange.com/questions/153587/environment-variable-assignment-followed-by-command
+    echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --remove --index-info
+    if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
+  fi
+
+  # looking for another commit that happens to be equal to this one
+  if [ -v REPARENT ]; then
+    local current_id target_commit temp_array
+    read -a temp_array <<< "$(current_reparent_id $GIT_COMMIT | sha1sum)"
+    current_id="${temp_array[0]}"
+    target_commit="${map_reparent[h$current_id]}"
+      "    current_id=$current_id target_commit=$target_commit"
+    if [ ! -z "$target_commit" ]; then
+      # If a corresponding target commit is found then we must stop all
+      # rewriting, saving the value of the target commit. It will be used latter
+      # in a filter-branch/parent-filter command, to replace the parent,
+      # or, if it is a leaf commit, just point the whole branch to the replacement.
+      reparent_source=$GIT_COMMIT
+      reparent_target=$target_commit
+    fi
+  fi
 }
 declare -fx index_filter
+
+function parent_filter {
+  sed "s/[[:blank:]]*-p[[:blank:]]*/ /g; s/^ //; s/ $//" | IFS=" " read -a array_parents
+  for cur_parent in "${array_parents[@]}"
+  do
+    if [ -v map_reparent[h$cur_parent] ]; then
+      echo "-p ${map_reparent[h$cur_parent]}"
+    else
+      echo "-p $cur_parent"
+    fi
+  done
+}
+declare -fx parent_filter
+
+function reparent_commit {
+  branch_commit="$(git rev-parse "$1")"
+  if [ "$reparent_source" = "$branch_commit" ]; then
+    __git $LINENO update-ref "$1" "$reparent_target"
+  else
+    __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --parent-filter '
+      parent_filter | indent_prepend
+    ' -- "$1"
+  fi
+}
 
 function indent_prepend {
   local tab="$(echo -e '\t')" IFS= line= trimmed= nocolors=
@@ -792,13 +817,19 @@ if [ "$COPY" = "NO" ]; then
   if [ "$DEL" = "NO" ] && [ "$src_branch" = "$dst_branch" ]; then
     # if moving inside a single branch, do it at once
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-    index_filter -s | indent_prepend
+      index_filter -s | indent_prepend
     ' -- "${commits[@]}" "$src_branch"
+    if [ -v REPARENT ]; then
+      reparent_commit "$src_branch"
+    fi
   elif [ "$_has_filter" = 1 ]; then
     # if there are filters, then we need to remove file by file
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-    index_filter -r | indent_prepend
+      index_filter -r | indent_prepend
     ' -- "${commits[@]}" "$src_branch"
+    if [ -v REPARENT ]; then
+      reparent_commit "$src_branch"
+    fi
   elif [ -z "$src_dir" ]; then
     # removing the branch, since source directory is the root
     __git $LINENO branch -D "$src_branch"
@@ -830,7 +861,10 @@ else
   declare -fx filter_to_move
   __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
     index_filter -m | indent_prepend
-    ' -- "${commits[@]}" "$tmp_branch"
+    ' -- "$tmp_branch"
+  if [ -v REPARENT ]; then
+    reparent_commit "$tmp_branch"
+  fi
 fi
 # deleting 'original' branches (git creates these as backups)
 __git $LINENO update-ref -d refs/original/refs/heads/"$tmp_branch"
