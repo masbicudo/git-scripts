@@ -2,6 +2,9 @@
 ver=v0.3.8
 
 # TODO: use git-filter-repo if installed - https://github.com/newren/git-filter-repo
+# TODO: reparent needs a dictionary to be created and exported, but bash can't export arrays
+#       we can either: 1. save a temp file with the needed dictionary
+#                      2. recalculate the hashes every time they are needed
 
 # argument variables
 ZIP=NO
@@ -48,7 +51,8 @@ fi
 #BEGIN_DEBUG
 function debug { echo "[92m$@[0m"; }
 declare -fx debug
-function debug_file { if [ "$HELP" = "NO" ]; then touch "/tmp/__debug.git-hist-mv.txt"; echo "$@" >> "/tmp/__debug.git-hist-mv.txt"; fi }
+declare -x HELP
+function debug_file { if [ "$HELP" != "YES" ]; then touch "/tmp/__debug.git-hist-mv.txt"; echo "$@" >> "/tmp/__debug.git-hist-mv.txt"; fi }
 declare -fx debug_file
 #END_DEBUG
 
@@ -357,7 +361,7 @@ if [ -v REPARENT ]; then
   R_EQ_MSG=$?
   ! [[ $REPARENT =~ t ]]
   R_EQ_TREE=$?
-  declare -x R_EQ_MSG R_EQ_TREE
+  declare -x R_EQ_MSG R_EQ_TREE REPARENT
 fi
 
 # normalizing filters and their options
@@ -494,6 +498,8 @@ if [ "$NOINFO" = "NO" ]; then
   fi
   print_var F_MIN_SIZE
   print_var F_MAX_SIZE
+  print_var R_EQ_MSG
+  print_var R_EQ_TREE
   if [ "$SIMULATE" = "YES" ]; then
     print_var SIMULATE
   fi
@@ -596,27 +602,31 @@ function is_file_selected {
 declare -fx is_file_selected
 
 function current_reparent_id {
+  debug_file "  ## current_reparent_id $1"
+  write_tree="$(git write-tree --missing-ok)"
+  debug_file "    GIT_INDEX_FILE=$GIT_INDEX_FILE"
+  debug_file "    write_tree=$write_tree"
   # $1 is the commit hash
-  [ "$R_EQ_TREE" = 1 ] && git write-tree
-  [ "$R_EQ_MSG" = 1 ] &&  git show -s --format=%B $1
+  [ "$R_EQ_TREE" = 1 ] && echo "$write_tree"
+  [ "$R_EQ_MSG" = 1 ] &&  git show -s --format=%B "$1"
 }
-declare -fx commit_reparent_id
+declare -fx current_reparent_id
 
 function commit_reparent_id {
   # $1 is the commit hash
-  [ "$R_EQ_TREE" = 1 ] && git rev-parse $1^{tree}
-  [ "$R_EQ_MSG" = 1 ] &&  git show -s --format=%B $1
+  [ "$R_EQ_TREE" = 1 ] && git rev-parse "$1"^{tree}
+  [ "$R_EQ_MSG" = 1 ] &&  git show -s --format=%B "$1"
 }
 declare -fx commit_reparent_id
 
-declare -ax map_reparent
 if [ -v REPARENT ]; then
   declare temp_array=
+  declare -x temp_dir=$(mktemp -d /tmp/git-hist-mv.XXXXXXXXXXXXXXXX)
   while read commithash
   do
     read -a temp_array <<< "$(commit_reparent_id $commithash | sha1sum)"
-    debug map_reparent[h"${temp_array[0]}"]="$commithash"
-    map_reparent[h"${temp_array[0]}"]="$commithash"
+    debug "map reparent tree ${temp_array[0]} to commit $commithash"
+    echo "${temp_array[0]} $commithash" >> "$temp_dir/replacement-map.txt"
   done <<< "$(git rev-list --all)"
   unset -v temp_array
 fi
@@ -625,21 +635,31 @@ function filter_ls_files {
   debug_file "  ## filter_ls_files $1"
   debug_file "    _has_filter=$_has_filter"
   debug_file "    GIT_COMMIT=$GIT_COMMIT"
+
+  # ref: https://git-scm.com/docs/git-update-index#_using_index_info
+  # if $1 contains:
+  # - "-r": remove selected files, and keed unselected files
+  #         (if there are filters then needs to process file by file,
+  #         otherwise just delete whole folder)
+  # - "-m": remove unselected files and move selected files from src_dir to dst_dir
+  #         (needs to process file by file)
+  # - "-s": move selected files from src_dir to dst_dir
+  #         (needs to process file by file)
+  if [ "$1" = "-r" ] && [ "$_has_filter" = 0 ]; then
+    git rm --cached --ignore-unmatch -r -f -- "$src_dir" > /dev/null 2>&1
+    return
+  fi
+
   # ref: https://stackoverflow.com/questions/1951506/add-a-new-element-to-an-array-without-specifying-the-index-in-bash
   __rm_files=()
 
+  # use printf or echo to output a line for each file
+  # - to remove a file just skip it, don't write a corresponding line, then git rm that file
+  # - to move a file write: $mode $sha $stage	new_file_name
+  #     Note: the char before new_file_name is a TAB character (ALT + NumPad 0 0 9)
   while read mode sha stage path
   do
     debug_file "    $mode $sha $stage $path"
-    # ref: https://git-scm.com/docs/git-update-index#_using_index_info
-    # use printf or echo to output a line for each file
-    # - to remove a file just skip it, don't write a corresponding line, then git rm that file
-    # - to move a file write: $mode $sha $stage	new_file_name
-    #     Note: the char before new_file_name is a TAB character (ALT + NumPad 0 0 9)
-    # if $1 contains:
-    # - "-r": remove selected files, and keed unselected files
-    # - "-m": remove unselected files and move selected files from src_dir to dst_dir
-    # - "-s": move selected files from src_dir to dst_dir
 
     # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
     ! [ "$1" = "-r" ]; TEST_REMOVE=$?
@@ -689,9 +709,23 @@ function filter_ls_files {
   fi
 }
 declare -fx filter_ls_files
-declare -x reparent_source reparent_target
+
+function get_commit_from_tree {
+  local tree_hash commit_hash
+  while IFS=' ' read -r tree_hash commit_hash
+  do
+    if [ "$tree_hash" = "$1" ]; then
+      echo $commit_hash
+      break
+    fi
+  done < "$temp_dir/replacement-map.txt"
+}
+declare -fx get_commit_from_tree
+
+declare -x reparent_source=
+declare -x reparent_target=
 function index_filter {
-  if [ ! -z "$reparent_source" ]; then return; fi
+  if [ -f "$temp_dir/replacement-action.txt" ]; then return; fi
   # using filter-branch/index-filter, update-index/index-info and rm/cached to move and delete files
   # - filter-branch/index-filter iterates each commit without checking out each commit
   # - update-index/index-info changes multiple file pathes in a commit
@@ -717,43 +751,49 @@ function index_filter {
 
   # looking for another commit that happens to be equal to this one
   if [ -v REPARENT ]; then
-    local current_id target_commit temp_array
-    read -a temp_array <<< "$(current_reparent_id $GIT_COMMIT | sha1sum)"
-    current_id="${temp_array[0]}"
-    target_commit="${map_reparent[h$current_id]}"
-      "    current_id=$current_id target_commit=$target_commit"
+    debug "try commit replacement"
+    local cur_tree_hash target_commit temp_array
+    debug_file "  calling current_reparent_id"
+    { read -a temp_array ; } <<< "$(current_reparent_id $GIT_COMMIT | sha1sum)"
+    cur_tree_hash="${temp_array[0]}"
+    target_commit=$(get_commit_from_tree $cur_tree_hash)
+    debug  "  cur_tree_hash=$cur_tree_hash target_commit=$target_commit"
     if [ ! -z "$target_commit" ]; then
       # If a corresponding target commit is found then we must stop all
       # rewriting, saving the value of the target commit. It will be used latter
       # in a filter-branch/parent-filter command, to replace the parent,
       # or, if it is a leaf commit, just point the whole branch to the replacement.
-      reparent_source=$GIT_COMMIT
-      reparent_target=$target_commit
+      echo "$GIT_COMMIT $target_commit" >> "$temp_dir/replacement-action.txt"
+      debug  "  reparent_source=$GIT_COMMIT reparent_target=$target_commit"
     fi
   fi
 }
 declare -fx index_filter
 
 function parent_filter {
-  sed "s/[[:blank:]]*-p[[:blank:]]*/ /g; s/^ //; s/ $//" | IFS=" " read -a array_parents
-  for cur_parent in "${array_parents[@]}"
-  do
-    if [ -v map_reparent[h$cur_parent] ]; then
-      echo "-p ${map_reparent[h$cur_parent]}"
-    else
-      echo "-p $cur_parent"
-    fi
-  done
+  local reparent_source reparent_target
+  { IFS=' ' read -r reparent_source reparent_target ; } < "$temp_dir/replacement-action.txt"
+  debug_file "    ## parent_filter"
+  debug_file "      GIT_COMMIT=$GIT_COMMIT"
+  debug_file "      reparent_source=$reparent_source"
+  debug_file "      reparent_target=$reparent_target"
+  input="$(cat)"
+  debug_file "      stdin=$input"
+  output="$(sed "s/$reparent_source/$reparent_target/g" <<< "$input")"
+  debug_file "      stdout=$output"
+  echo "$output"
 }
 declare -fx parent_filter
 
 function reparent_commit {
+  if [ ! -f "$temp_dir/replacement-action.txt" ]; then return; fi
+  debug_file "  ## reparent_commit $1"
   branch_commit="$(git rev-parse "$1")"
   if [ "$reparent_source" = "$branch_commit" ]; then
     __git $LINENO update-ref "$1" "$reparent_target"
   else
-    __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --parent-filter '
-      parent_filter | indent_prepend
+    __git $LINENO filter-branch -f --parent-filter '
+      parent_filter
     ' -- "$1"
   fi
 }
@@ -821,7 +861,7 @@ if [ "$COPY" = "NO" ]; then
     if [ -v REPARENT ]; then
       reparent_commit "$src_branch"
     fi
-  elif [ "$_has_filter" = 1 ]; then
+  elif [ "$_has_filter" = 1 ] || [ ! -z "$src_dir" ]; then
     # if there are filters, then we need to remove file by file
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
       index_filter -r | indent_prepend
@@ -829,16 +869,11 @@ if [ "$COPY" = "NO" ]; then
     if [ -v REPARENT ]; then
       reparent_commit "$src_branch"
     fi
-  elif [ -z "$src_dir" ]; then
+  else
     # removing the branch, since source directory is the root
     __git $LINENO branch -D "$src_branch"
     ZIP=
     if [ "$dst_branch" = "$src_branch" ]; then dst_branch_exists=0; fi
-  else
-    # removing source directory from the source branch
-    __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-      git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"' | indent_prepend
-      ' -- "${commits[@]}" "$src_branch"
   fi
   # deleting 'original' branches (git creates these as backups)
   __git $LINENO update-ref -d refs/original/refs/heads/"$src_branch"
