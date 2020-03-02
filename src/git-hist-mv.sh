@@ -4,7 +4,17 @@ ver=v0.3.8
 # TODO: use git-filter-repo if installed - https://github.com/newren/git-filter-repo
 # TODO: reparent needs a dictionary to be created and exported, but bash can't export arrays
 #       we can either: 1. save a temp file with the needed dictionary
+#                         1.1. save one file per entry, and use filesystem as a dictionary
 #                      2. recalculate the hashes every time they are needed
+# TODO: git filter-branch/index-filter traverses the commits from root to leaves
+#         We need to find the best reparent commit in the oposite order.
+#         If messages are considered as equality parameters, we can list all messages
+#         in reverse order and find the first that appears in the target. If many
+#         have the same message they must be tested in reverse order for other
+#         equality parameters. If the tree is considered as equality parameter,
+#         then we need to process the current list of commits. While doing that
+#         we can try to find the resulting tree inside the target. The last one
+#         that matches, is the one to be used as replacement.
 
 # argument variables
 ZIP=NO
@@ -603,6 +613,7 @@ declare -fx is_file_selected
 
 function current_reparent_id {
   debug_file "  ## current_reparent_id $1"
+  # ref: https://stackoverflow.com/questions/58668952/how-to-get-the-tree-hash-of-the-index-in-git
   write_tree="$(git write-tree --missing-ok)"
   debug_file "    GIT_INDEX_FILE=$GIT_INDEX_FILE"
   debug_file "    write_tree=$write_tree"
