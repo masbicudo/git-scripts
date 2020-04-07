@@ -48,7 +48,8 @@ fi
 #BEGIN_DEBUG
 function debug { echo "[92m$@[0m"; }
 declare -fx debug
-function debug_file { if [ "$HELP" = "NO" ]; then touch "/tmp/__debug.git-hist-mv.txt"; echo "$@" >> "/tmp/__debug.git-hist-mv.txt"; fi }
+declare -x HELP
+function debug_file { if [ "$HELP" != "YES" ]; then touch "/tmp/__debug.git-hist-mv.txt"; echo "$@" >> "/tmp/__debug.git-hist-mv.txt"; fi }
 declare -fx debug_file
 #END_DEBUG
 
@@ -61,7 +62,7 @@ function quote_arg {
   # then: needs to be quoted
   if [[ ! "$1" =~ [[:blank:]] ]] && [ "${1//
 /}" = "$1" ] && [ ! -z "$1" ]
-  then echo "${1//\'/\"\'\"}"; 
+  then echo "${1//\'/\"\'\"}";
   else echo "'${1//\'/\'\"\'\"\'}'"
   fi
   return 0
@@ -578,21 +579,30 @@ function filter_ls_files {
   debug_file "  ## filter_ls_files $1"
   debug_file "    _has_filter=$_has_filter"
   debug_file "    GIT_COMMIT=$GIT_COMMIT"
+  # ref: https://git-scm.com/docs/git-update-index#_using_index_info
+  # if $1 contains:
+  # - "-r": remove selected files, and keed unselected files
+  #         (if there are filters then needs to process file by file,
+  #         otherwise just delete whole folder)
+  # - "-m": remove unselected files and move selected files from src_dir to dst_dir
+  #         (needs to process file by file)
+  # - "-s": move selected files from src_dir to dst_dir
+  #         (needs to process file by file)
+  if [ "$1" = "-r" ] && [ "$_has_filter" = 0 ]; then
+    git rm --cached --ignore-unmatch -r -f -- "$src_dir" > /dev/null 2>&1
+    return
+  fi
+
   # ref: https://stackoverflow.com/questions/1951506/add-a-new-element-to-an-array-without-specifying-the-index-in-bash
   __rm_files=()
 
+  # use printf or echo to output a line for each file
+  # - to remove a file just skip it, don't write a corresponding line, then git rm that file
+  # - to move a file write: $mode $sha $stage	new_file_name
+  #     Note: the char before new_file_name is a TAB character (ALT + NumPad 0 0 9)
   while read mode sha stage path
   do
     debug_file "    $mode $sha $stage $path"
-    # ref: https://git-scm.com/docs/git-update-index#_using_index_info
-    # use printf or echo to output a line for each file
-    # - to remove a file just skip it, don't write a corresponding line, then git rm that file
-    # - to move a file write: $mode $sha $stage	new_file_name
-    #     Note: the char before new_file_name is a TAB character (ALT + NumPad 0 0 9)
-    # if $1 contains:
-    # - "-r": remove selected files, and keed unselected files
-    # - "-m": remove unselected files and move selected files from src_dir to dst_dir
-    # - "-s": move selected files from src_dir to dst_dir
 
     # ref: https://stackoverflow.com/questions/56700325/xor-conditional-in-bash
     ! [ "$1" = "-r" ]; TEST_REMOVE=$?
@@ -658,11 +668,13 @@ function index_filter {
   debug "dst_dir=$dst_dir"
   local _PATHS="$(filter_ls_files $1)"
   debug "$_PATHS"
-  if [ -z "$_PATHS" ]; then return; fi
-  # ref: https://unix.stackexchange.com/questions/358850/what-are-all-the-ways-to-create-a-subshell-in-bash
-  # ref: https://unix.stackexchange.com/questions/153587/environment-variable-assignment-followed-by-command
-  echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --remove --index-info
-  if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
+
+  if [ ! -z "$_PATHS" ]; then
+    # ref: https://unix.stackexchange.com/questions/358850/what-are-all-the-ways-to-create-a-subshell-in-bash
+    # ref: https://unix.stackexchange.com/questions/153587/environment-variable-assignment-followed-by-command
+    echo -n "$_PATHS" | GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --remove --index-info
+    if [ -e "$GIT_INDEX_FILE.new" ]; then mv "$GIT_INDEX_FILE.new" "$GIT_INDEX_FILE"; fi
+  fi
 }
 declare -fx index_filter
 
@@ -724,23 +736,18 @@ if [ "$COPY" = "NO" ]; then
   if [ "$DEL" = "NO" ] && [ "$src_branch" = "$dst_branch" ]; then
     # if moving inside a single branch, do it at once
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-    index_filter -s | indent_prepend
+      index_filter -s | indent_prepend
     ' -- "${commits[@]}" "$src_branch"
-  elif [ "$_has_filter" = 1 ]; then
+  elif [ "$_has_filter" = 1 ] || [ ! -z "$src_dir" ]; then
     # if there are filters, then we need to remove file by file
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-    index_filter -r | indent_prepend
+      index_filter -r | indent_prepend
     ' -- "${commits[@]}" "$src_branch"
-  elif [ -z "$src_dir" ]; then
+  else
     # removing the branch, since source directory is the root
     __git $LINENO branch -D "$src_branch"
     ZIP=
     if [ "$dst_branch" = "$src_branch" ]; then dst_branch_exists=0; fi
-  else
-    # removing source directory from the source branch
-    __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
-      git rm --cached --ignore-unmatch -r -f '"'""${src_dir//\'/\'\"\'\"\'}""'"' | indent_prepend
-      ' -- "${commits[@]}" "$src_branch"
   fi
   # deleting 'original' branches (git creates these as backups)
   __git $LINENO update-ref -d refs/original/refs/heads/"$src_branch"
@@ -763,6 +770,7 @@ else
   __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
     index_filter -m | indent_prepend
     ' -- "${commits[@]}" "$tmp_branch"
+    ##' -- "$tmp_branch"
 fi
 # deleting 'original' branches (git creates these as backups)
 __git $LINENO update-ref -d refs/original/refs/heads/"$tmp_branch"
