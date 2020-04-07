@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=v0.3.7
+ver=v0.3.8
 
 # TODO: use git-filter-repo if installed - https://github.com/newren/git-filter-repo
 
@@ -404,26 +404,45 @@ function get_branch_and_dir {
   echo "$inner_path"
 }
 
-if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
-  debug arg_3 and arg_4 are empty
-  debug DEL=$DEL
-  debug arg_1=$arg_1
-  unset -v src_branch src_dir
-  { IFS= read -r src_branch && IFS= read -r src_dir; } <<< "$(get_branch_and_dir "$arg_1")"
-  if [ "$DEL" = "NO" ]; then
-    unset -v dst_branch dst_dir
-    { IFS= read -r dst_branch && IFS= read -r dst_dir; } <<< "$(get_branch_and_dir "$arg_2")"
-  fi
-
-  #debug dst_branch=$dst_branch
-
-  if [ -z "$src_branch" ]
-  then
-    >&2 echo -e "\e[91m""Invalid usage, cannot determine the source branch""\e[0m"
+debug argc=$argc
+debug DEL=$DEL
+debug arg_1=$arg_1
+debug arg_2=$arg_2
+debug arg_3=$arg_3
+debug arg_4=$arg_4
+if [ "$DEL" = "YES" ]; then
+  if [ "$argc" -eq 1 ]; then
+    # source branch and directory
+    unset -v src_branch src_dir
+    { IFS= read -r src_branch && IFS= read -r src_dir; } <<< "$(get_branch_and_dir "$arg_1")"
+    if [ -z "$src_branch" ]
+    then
+      >&2 echo -e "\e[91m""Invalid usage, cannot determine the source branch""\e[0m"
+      exit 1
+    fi
+    source_branch_existed=1
+  elif [ "$argc" -eq 2 ]; then
+    src_branch="$(sed 's \\ \/ g' <<< "$arg_1")"
+    src_dir="$(sed 's \\ \/ g' <<< "$arg_2")"
+  else
+    >&2 echo -e "\e[91m""Invalid usage, must specify 1 or 2 ordinal parameters when deleting""\e[0m"
     exit 1
   fi
-  source_branch_existed=1
-  if [ "$DEL" = "NO" ]; then
+else
+  if [ "$argc" -eq 2 ]; then
+    # source branch and directory
+    unset -v src_branch src_dir
+    { IFS= read -r src_branch && IFS= read -r src_dir; } <<< "$(get_branch_and_dir "$arg_1")"
+    if [ -z "$src_branch" ]
+    then
+      >&2 echo -e "\e[91m""Invalid usage, cannot determine the source branch""\e[0m"
+      exit 1
+    fi
+    source_branch_existed=1
+
+    # destination branch and directory
+    unset -v dst_branch dst_dir
+    { IFS= read -r dst_branch && IFS= read -r dst_dir; } <<< "$(get_branch_and_dir "$arg_2")"
     if [ -z "$dst_branch" ]
     then
       dst_branch="$(sed 's \\ \/ g; s /.*  g' <<< "$arg_2")"
@@ -432,19 +451,18 @@ if [ ! -v "arg_3" ] && [ ! -v "arg_4" ]; then
     else
       dst_branch_exists=1
     fi
-  fi
 
-elif [ -v "arg_3" ] && [ ! -v "arg_4" ]; then
-  debug arg_3 is empty
-  >&2 echo -e "\e[91m""Invalid usage, must specify 2 or 4 ordinal params""\e[0m"
-  exit 1
-else
-  debug arg_3 and arg_4 are defined
-  src_branch="$(sed 's \\ \/ g' <<< "$arg_1")"
-  src_dir="$(sed 's \\ \/ g' <<< "$arg_2")"
-  dst_branch="$(sed 's \\ \/ g' <<< "$arg_3")"
-  dst_dir="$(sed 's \\ \/ g' <<< "$arg_4")"
+  elif [ "$argc" -eq 4 ]; then
+    src_branch="$(sed 's \\ \/ g' <<< "$arg_1")"
+    src_dir="$(sed 's \\ \/ g' <<< "$arg_2")"
+    dst_branch="$(sed 's \\ \/ g' <<< "$arg_3")"
+    dst_dir="$(sed 's \\ \/ g' <<< "$arg_4")"
+  else
+    >&2 echo -e "\e[91m""Invalid usage, must specify 2 or 4 ordinal parameters""\e[0m"
+    exit 1
+  fi
 fi
+
 declare -x src_dir
 declare -x dst_dir
 
