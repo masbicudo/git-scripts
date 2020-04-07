@@ -15,6 +15,7 @@ NOINFO=NO
 dkgray=[90m;red=[91m;green=[92m;yellow=[93m;blue=[94m;magenta=[95m
 cyan=[96m;white=[97m;black=[30m;dkred=[31m;dkgreen=[32m;dkyellow=[33m
 dkblue=[34m;dkmagenta=[35m;dkcyan=[36m;gray=[37m;cdef=[0m
+lightsalmon="[38;2;255;160;122m"
 
 # checking terminal
 if [ "${SHELL%%/bin/bash}" = "$SHELL" ]; then
@@ -47,7 +48,7 @@ fi
 #BEGIN_DEBUG
 function debug { echo "[92m$@[0m"; }
 declare -fx debug
-function debug_file { touch "/tmp/__debug.git-hist-mv.txt"; echo "$@" >> "/tmp/__debug.git-hist-mv.txt"; }
+function debug_file { if [ "$HELP" = "NO" ]; then touch "/tmp/__debug.git-hist-mv.txt"; echo "$@" >> "/tmp/__debug.git-hist-mv.txt"; fi }
 declare -fx debug_file
 #END_DEBUG
 
@@ -79,6 +80,7 @@ if [ "$*" = "" ]; then
 fi
 declare PARSE_COMMITS
 unset -v PARSE_COMMITS
+script_file="$0"
 argc=0
 commits=()
 while [[ $# -gt 0 ]]
@@ -120,29 +122,31 @@ fi
 # display some info
 if [ "$NOINFO" = "NO" ]; then
   echo -e "$blue""git-hist-mv ""$dkyellow""$ver""$cdef"
-  echo $dkgray$0$all_args$cdef
+  echo $dkgray$script_file$all_args$cdef
   debug_file "# git-hist-mv $ver $(date --utc +%FT%T.%3NZ)"
   debug_file "  $(pwd)"
-  debug_file "  $0$all_args"
+  debug_file "  $script_file$all_args"
 fi
 
 # checking git version
-if ! which git > /dev/null 2>&1; then
-  >&2 echo $red"git is not installed"$cdef
-  __error=1
-fi
-git_ver=$(git --version)
-git_ver_SEP=$(echo "$git_ver" | sed 's/[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*/_SEPARATOR_/')
-git_ver_s=$(echo "$git_ver_SEP" | sed 's/_SEPARATOR_.*$//')
-git_ver_e=$(echo "$git_ver_SEP" | sed 's/^.*_SEPARATOR_//')
-git_ver=${git_ver#"$git_ver_s"}
-git_ver=${git_ver%"$git_ver_e"}
-min_supported_git_ver=2.23.0
-read min_git_ver <<< $(echo "$min_supported_git_ver
+if [ "$HELP" = "NO" ]; then
+  if ! which git > /dev/null 2>&1; then
+    >&2 echo $red"git is not installed"$cdef
+    __error=1
+  fi
+  git_ver=$(git --version)
+  git_ver_SEP=$(echo "$git_ver" | sed 's/[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*/_SEPARATOR_/')
+  git_ver_s=$(echo "$git_ver_SEP" | sed 's/_SEPARATOR_.*$//')
+  git_ver_e=$(echo "$git_ver_SEP" | sed 's/^.*_SEPARATOR_//')
+  git_ver=${git_ver#"$git_ver_s"}
+  git_ver=${git_ver%"$git_ver_e"}
+  min_supported_git_ver=2.23.0
+  read min_git_ver <<< $(echo "$min_supported_git_ver
 $git_ver" | sort -t '.' -k 1,1 -k 2,2 -k 3,3 -k 4,4)
-if [ "$min_git_ver" = "$git_ver" ] && [ "$min_git_ver" != "$min_supported_git_ver" ]; then
-  >&2 echo $red"Error: minimum supported git version is $min_supported_git_ver"$cdef
-  __error=1
+  if [ "$min_git_ver" = "$git_ver" ] && [ "$min_git_ver" != "$min_supported_git_ver" ]; then
+    >&2 echo $red"Error: minimum supported git version is $min_supported_git_ver"$cdef
+    __error=1
+  fi
 fi
 
 print_var () { local cl_name="\e[38;5;146m" cl_value="\e[38;5;186m"; [ -v $1 ] && echo -e "$cl_name"$1"\e[0m"="$cl_value"${!1}"\e[0m"; }
@@ -154,62 +158,95 @@ print_var git_ver
 #BEGIN_AS_IS
 cl_op=$blue
 cl_colons=$dkgray
+cl_char=$crimson
+cl_str=$lightsalmon
 if [ "$HELP" = "YES" ]; then
-  echo "$white""# Help""$cdef"
-  echo "Usage: "$dkgray"$0 "$cl_op"["$dkyellow"source and target"$cl_op"] "$cl_op"["$dkyellow"options"$cl_op"]"$cdef""
-  echo $cl_op"["$dkyellow"source and target"$cl_op"]"$cl_colons":"$cdef
-  echo "  "Specify the source and target of the operation.
-  echo "  "They can be specified in three formats:
-  echo "  "$cl_op"- "$dkyellow"Joined format"$cl_colons": "$white"branch/directory/filename"$cdef
-  echo "    "$red"Example"$cl_colons": "
-  echo "      "$dkgray"$0"$yellow" 'some/branch/filename' 'other-branch/dir/fname.txt'"
-  echo "    "$dkgreen"Note"$cl_colons": "$cdef
-  echo "      Branch names containing '/' can be recognized if they actually exist."
-  echo "      The joined format tries to match branches that exist first."
-  echo "      The source branch must exist, but the destination does not."
-  echo "      In this case, the first part of the path is the new-branch name."
-  echo "  "$cl_op"- "$dkyellow"Separated format"$cl_colons": "$white"branch first then directory/filename"$cdef
-  echo "    "$red"Example"$cl_colons": "
-  echo "      "$dkgray"$0"$yellow" 'some/branch' 'filename' 'new-branch' 'dir/fname.txt'"
-  echo "    "$dkgreen"Note"$cl_colons": "$cdef
-  echo "      Branch names containing '/' can be used even if they don't exist."
-  echo "      The separated format supports creating new branches."
-  echo "      In the previous example, 'new-branch' can be non-existent."
-  echo "  "$dkgreen"Note"$cl_colons": "$cdef
-  echo "    "If both source and target are specified, both must be in the same
-  echo "    "format, that is, either 2 or 4 path arguments are supported. If 2, then
-  echo "    "format is joined, if 4, then format is separated.
-  echo $cl_op"["$dkyellow"options"$cl_op"]"$cl_colons":"
-  echo "  "$yellow"--zip "$cl_op"or "$yellow"-z"$cl_colons":"                                $white"merge timelines"
-  echo "  "$yellow"--copy "$cl_op"or "$yellow"-c"$cl_colons":"                               $white"copy instead of move"
-  echo "  "$yellow"--delete "$cl_op"or "$yellow"--del "$cl_op"or "$yellow"-d"$cl_colons":"   $white"delete instead of move"
-  echo "  "$yellow"--simulate "$cl_op"or "$yellow"--sim "$cl_op"or "$yellow"-s"$cl_colons":" $white"show all git commands instead of executing them"
-  echo "  "$yellow"--file-name "$cl_op"or "$yellow"-fn"$cl_colons":" $white"filter by filename"
-  echo "  "$yellow"--dir"$cl_colons":" $white"filter by dirname"
-  echo "  "$yellow"--path "$cl_op"or "$yellow"-p"$cl_colons":" $white"filter by path (directory and file name)"
-  echo "    "$dkgreen"Note"$cl_colons": "$cdef
-  echo "      "When filtering by a string, you can preceed the string with some options:
-  echo "      "- '"r"' to indicate a regex filter 'r"^(some|file)"'
-  echo "      "- '"b"' to indicate a list of patterns matching the start of the string
-  echo "        "e.g. "'b dir1/ dir2/'"
-  echo "      "- '"e"' to indicate a list of patterns matching the end of the string
-  echo "        "e.g. "'e .png .jpg'"
-  echo "      "- '"c"' to indicate a list of patterns matching anywhere in the string
-  echo "        "e.g. "'c foo'"
-  echo "      "- '"x"' to indicate a list of patterns matching the whole string
-  echo "        "e.g. "'x=exact file name.png'"
-  echo "      "Negate a string pattern using "'!'" before or after the option letter:
-  echo "        "e.g. "'x!=exact file name.png'"
-  echo "        "e.g. "'!e=.png'"
-  echo "      "Use "'='" to indicate a single pattern, insetead of many separated by spaces.
-  echo "      "Use of "'='" or "'!='" alone imply option "'x'".
-  echo "  "$yellow"--min-size "$cl_op"or "$yellow"-nz"$cl_colons":" $white"filter by minimum file size"
-  echo "  "$yellow"--max-size "$cl_op"or "$yellow"-xz"$cl_colons":" $white"filter by maximum file size"
-  echo "    "$dkgreen"Note"$cl_colons": "$cdef
-  echo "      "When filtering by file size, you can append units to the number:
-  echo "        "e.g. "100MB"
-  echo "        "e.g. "1k"
-  echo "      "It is case insensitive, and ignores the final "'B'" or "'b'" if present.
+  #ref: https://www.gnu.org/software/sed/manual/sed.html
+  sed -r '
+  /Example:/,/Note:/!{
+    s/\<[0-9][0-9]*[[:alnum:]]*\>/'$magenta'\0'$cdef'/g;
+    s/'"'"'[^'"'"'][^'"'"']*'"'"'/'$cl_str'\0'$cdef'/g;
+  }
+  s/'"${script_file//\//\\\/}"'/'$dkgray'\0'$yellow'/g;
+  s/e\.g\./'$red'\0'$yellow'/g;
+  s/\[/X/g;
+  /^[[:blank:]]*[[:alnum:] _-]*:[[:blank:]]*$/ {
+    s/Example:/'$red'\0/;
+    s/Note:/'$dkgreen'\0/;
+    t skip_if_any_other
+      s/^[[:blank:]]*[[:alnum:]][[:alnum:]_-]*:/'$yellow'\0/;
+    : skip_if_any_other
+    s/:/'$cl_colons':/;
+  }
+  /[[:blank:]]*>/!{
+    s/\[([^]]*)\]/'$cl_op'['$dkyellow'\1'$cl_op']/g;
+    s/`([^`]*)`/'$dkgray'\1'$cdef'/g;
+    s/^([[:blank:]]*)- ([^:]*):/\1'$cl_op'- '$dkyellow'\2'$cl_colons':'$white'/g;
+    /^[[:blank:]]*--?[[:alnum:]][[:alnum:]]*/ {
+      s/ or (--?[[:alnum:]][[:alnum:]]*)/'$blue' or '$yellow'\1/g;
+      s/--?[[:alnum:]][[:alnum:]]*/'$yellow'\0/;
+    };
+    s/:/'$dkgray':'$cdef'/g;
+    s/([[:blank:]]*)(#.*)/\1'$white'\2'$cdef'/g;
+  };
+  s/$/'$cdef'/g;
+  s/X/[/g;
+' <<< "
+# Help
+Usage: $script_file [source and target] [options]
+[source and target]:
+  Specify the source and target of the operation.
+  They can be specified in three formats:
+  - Joined format: branch/directory/filename
+    Example:
+      $script_file 'some/branch/filename' 'other-branch/dir/fname.txt'
+    Note:
+      Branch names containing '/' can be recognized if they actually exist.
+      The joined format tries to match branches that exist first.
+      The source branch must exist, but the destination does not.
+      In this case, the first part of the path is the new-branch name.
+  - Separated format: branch first then directory/filename
+    Example:
+      $script_file 'some/branch' 'filename' 'new-branch' 'dir/fname.txt'
+    Note:
+      Branch names containing '/' can be used even if they don't exist.
+      The separated format supports creating new branches.
+      In the previous example, 'new-branch' can be non-existent.
+  Note:
+    If both source and target are specified, both must be in the same
+    format, that is, either 2 or 4 path arguments are supported. If 2, then
+    format is joined, if 4, then format is separated.
+[options]:
+  --zip or -z: merge timelines
+  --copy or -c: copy instead of move
+  --delete or --del or -d: delete instead of move
+  --simulate or --sim or -s: show all git commands instead of executing them
+  --file-name or -fn  filter-string: filter by filename
+  --dir  filter-string: filter by dirname
+  --path or -p  filter-string: filter by path (directory and file name)
+    filter-string:
+      You can preceed the filter-string with some options:
+      - 'r': to indicate a regex filter 'r^(some|file)'
+      - 'b': to indicate a list of patterns matching the start of the string
+        e.g. 'b dir1/ dir2/'
+      - 'e': to indicate a list of patterns matching the end of the string
+        e.g. 'e .png .jpg'
+      - 'c': to indicate a list of patterns matching anywhere in the string
+        e.g. 'c foo'
+      - 'x': to indicate a list of patterns matching the whole string
+        e.g. 'x=exact file name.png'
+      Negate a string pattern using '!' before or after the option letter:
+        e.g. 'x!=exact file name.png'
+        e.g. '!e=.png'
+      Use '=' to indicate a single pattern, insetead of many separated by spaces.
+      Use of '=' or '!=' alone imply option 'x'.
+  --min-size or -nz: filter by minimum file size
+  --max-size or -xz: filter by maximum file size
+    Note:
+      When filtering by file size, you can append units to the number:
+        e.g. 100MB
+        e.g. 1k
+      It is case insensitive, and ignores the final 'B' or 'b' if present."
   exit 0
 fi
 #END_AS_IS
