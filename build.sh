@@ -82,7 +82,8 @@ echo "$blue""Build tool$cdef for $yellow""git-scripts""$cdef by $red""MASBicudo$
 [options]
   --path|-p:    indicates the target build path
   --install|-i: indicates a place to install the files
-  --release|-r: indicates a branch name to save a release build to
+  --release|-r: indicates that a release should be added to the release branch
+                followed by a commit message
   --branch|-b:  indicates a branch to get the source to build from
   #Settings options
   --save-branch|-sb: indicates a branch to save the settings file to
@@ -96,7 +97,7 @@ echo "$blue""Build tool$cdef for $yellow""git-scripts""$cdef by $red""MASBicudo$
   /[[:blank:]]*>/!{
     s/\[(.*)\]/['$dkyellow'\1'$cdef']/g;
     s/`([^`]*)`/'$dkgray'\1'$cdef'/g;
-    s/\|-/ '$blue'or'$cdef' -/g;
+    s/\|-/'$blue'|'$cdef'-/g;
     s/:/'$dkgray':'$cdef'/g;
     s/([[:blank:]]*)#(.*)/\1'$white'\2'$cdef'/g;
     s/--?[[:alnum:]]*/'$yellow'\0'$cdef'/g;
@@ -192,6 +193,7 @@ if [ -v USE_SETTINGS ]; then
     if [ -v BUILD_PATH ]; then echo "BUILD_PATH=$BUILD_PATH" >> "$SETTINGS_PATH" ; fi
     if [ -v INSTALL_PATH ]; then echo "INSTALL_PATH=$INSTALL_PATH" >> "$SETTINGS_PATH" ; fi
     if [ -v IS_DEBUG ]; then echo "IS_DEBUG=$IS_DEBUG" >> "$SETTINGS_PATH" ; fi
+    if [ -v RELEASE_MSG ]; then echo "RELEASE_MSG=$RELEASE_MSG" >> "$SETTINGS_PATH" ; fi
     if [ -v SETTINGS_BRANCH ]; then
       __git reset
       __git add -f "$SETTINGS_PATH"
@@ -205,7 +207,7 @@ if [ -v USE_SETTINGS ]; then
     do
       [ ! -v "$var_name" ] && declare "$var_name"="$var_value"
     done <<< "$(sed -r '
-      /^(BUILD_PATH|INSTALL_PATH|IS_DEBUG)=(.*)$/!d;
+      /^(BUILD_PATH|INSTALL_PATH|IS_DEBUG|RELEASE_MSG)=(.*)$/!d;
       s/=/ /;
       ' "$SETTINGS_PATH")"
   fi
