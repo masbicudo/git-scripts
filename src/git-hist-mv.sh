@@ -159,7 +159,6 @@ print_var git_ver
 #BEGIN_AS_IS
 cl_op=$blue
 cl_colons=$dkgray
-cl_char=$crimson
 cl_str=$lightsalmon
 if [ "$HELP" = "YES" ]; then
   #ref: https://www.gnu.org/software/sed/manual/sed.html
@@ -541,7 +540,7 @@ fi
 
 function is_file_selected {
   debug_file "      ## is_file_selected"
-  debug_file "        F_DIR=$F_DIR F_FNAME=$F_FNAME F_MIN_SIZE=$F_MIN_SIZE F_MAX_SIZE=$F_MAX_SIZE"
+  debug_file "        F_PATH=$F_PATH F_DIR=$F_DIR F_FNAME=$F_FNAME F_MIN_SIZE=$F_MIN_SIZE F_MAX_SIZE=$F_MAX_SIZE"
   local _path="${1/#\"/}"
   _path="${_path/%\"/}"
 
@@ -737,6 +736,8 @@ declare -fx indent_prepend
 # GIT_WORK_TREE=.
 
 # creating a temporary branch based on the source branch if needed
+debug creating a temporary branch based on the source branch if needed
+debug DEL=$DEL src_branch=$src_branch dst_branch=$dst_branch COPY=$COPY
 if [ "$DEL" = "NO" ]; then
   if [ "$src_branch" != "$dst_branch" ] || [ "$COPY" = "YES" ]; then
     # A temporary branch is needed to do manipulations when:
@@ -750,19 +751,25 @@ fi
 
 # if moving inside a branch, just do the moving
 # if not copying, delete source files
+debug if moving inside a branch, just do the moving
+debug if not copying, delete source files
+debug COPY=$COPY DEL=$DEL src_branch=$src_branch dst_branch=$dst_branch _has_filter=$_has_filter src_dir=$src_dir
 if [ "$COPY" = "NO" ]; then
   if [ "$DEL" = "NO" ] && [ "$src_branch" = "$dst_branch" ]; then
     # if moving inside a single branch, do it at once
+    debug if moving inside a single branch, do it at once
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
       index_filter -s | indent_prepend
     ' -- "${commits[@]}" "$src_branch"
   elif [ "$_has_filter" = 1 ] || [ ! -z "$src_dir" ]; then
     # if there are filters, then we need to remove file by file
+    debug if there are filters, then we need to remove file by file
     __git $LINENO filter-branch -f --prune-empty --tag-name-filter cat --index-filter '
       index_filter -r | indent_prepend
     ' -- "${commits[@]}" "$src_branch"
   else
     # removing the branch, since source directory is the root
+    debug removing the branch, since source directory is the root
     __git $LINENO branch -D "$src_branch"
     ZIP=
     if [ "$dst_branch" = "$src_branch" ]; then dst_branch_exists=0; fi
@@ -772,12 +779,16 @@ if [ "$COPY" = "NO" ]; then
 fi
 
 # if we are only deleting something or moving inside a branch, then we are done
+debug if we are only deleting something or moving inside a branch, then we are done
+debug tmp_branch=$tmp_branch
 if [ ! -v tmp_branch ]; then
   exit 0
 fi
 
+debug dst_dir=$dst_dir _has_filter=$_has_filter src_dir=$src_dir
 if [ -z "$dst_dir" ] && [ "$_has_filter" = "0" ]; then
   # moving subdirectory to root with --subdirectory-filter
+  debug moving subdirectory to root with --subdirectory-filter
   if [ ! -z "$src_dir" ]; then
     __git $LINENO filter-branch --prune-empty --tag-name-filter cat --subdirectory-filter "$src_dir" -- "${commits[@]}" "$tmp_branch"
     # deleting 'original' branches (git creates these as backups)
@@ -794,6 +805,7 @@ fi
 __git $LINENO update-ref -d refs/original/refs/heads/"$tmp_branch"
 
 # getting commit hashes and datetimes
+debug getting commit hashes and datetimes
 
 if [ ! -v dst_branch_exists ]; then
   ! __git $LINENO show-ref --verify --quiet refs/heads/"$dst_branch"
@@ -847,7 +859,8 @@ else
   __git $LINENO checkout "$dst_branch"
 fi
 
-# zipping timelines:
+# zipping timelines
+debug zipping timelines
 if [ -v rebase_hash ]; then
   if [ "$ZIP" = "YES" ]; then
     __git -c rebase.autoSquash=false rebase --autostash "$rebase_hash"
