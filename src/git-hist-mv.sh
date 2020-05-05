@@ -1,5 +1,5 @@
 #!/bin/bash
-ver=v0.3.8
+ver=v0.3.9
 
 # TODO: use git-filter-repo if installed - https://github.com/newren/git-filter-repo
 
@@ -115,7 +115,7 @@ do
 done
 
 declare -x _has_filter=0
-if [ -v F_FNAME ] || [ -v F_DIR ] || [ -v F_MIN_SIZE ] || [ -v F_MAX_SIZE ]
+if [ -v F_PATH ] || [ -v F_FNAME ] || [ -v F_DIR ] || [ -v F_MIN_SIZE ] || [ -v F_MAX_SIZE ]
 then
   _has_filter=1
 fi
